@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Flask / SQLite database
+instance/
+*.db
+*.sqlite3
+
+# Trained model artifacts
+svm_model.pkl
+*.pkl
+*.pt
+
+# InsightFace model cache
+~/.insightface/
+buffalo_sc/
+
+# Environment variables
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
