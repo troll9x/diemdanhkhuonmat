@@ -11,8 +11,8 @@
 <body class="bg-light">
     <div class="container mt-4" style="max-width:800px">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="fw-bold mb-0">Live Attendance</h2>
-            <a href="/" class="btn btn-outline-secondary btn-sm">← Back</a>
+            <h2 class="fw-bold mb-0">Điểm danh trực tiếp</h2>
+            <a href="/" class="btn btn-outline-secondary btn-sm">← Quay lại</a>
         </div>
 
         <div class="card shadow-sm mb-4">
@@ -24,22 +24,21 @@
         </div>
 
         <div class="d-flex gap-2 mb-4">
-            <button id="start-btn" class="btn btn-primary px-4" onclick="startRecognition()">▶ Start
-                Recognition</button>
-            <button id="stop-btn" class="btn btn-danger px-4 d-none" onclick="stopRecognition()">⏹ Stop</button>
+            <button id="start-btn" class="btn btn-primary px-4" onclick="startRecognition()">▶ Bắt đầu</button>
+            <button id="stop-btn" class="btn btn-danger px-4 d-none" onclick="stopRecognition()">⏹ Dừng</button>
         </div>
 
         <div id="status-box" class="alert alert-secondary">
-            Press <strong>Start Recognition</strong> to begin.
+            Ấn <strong>Bắt đầu</strong> để bắt đầu điểm danh.
         </div>
 
         <div class="card shadow-sm">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span class="fw-semibold">Today's Log</span>
+                <span class="fw-semibold">Bản ghi hôm nay</span>
                 <span id="log-count" class="badge bg-primary">0</span>
             </div>
             <ul id="log-list" class="list-group list-group-flush">
-                <li class="list-group-item text-muted small">No records yet.</li>
+                <li class="list-group-item text-muted small">Chưa có bản ghi nào.</li>
             </ul>
         </div>
     </div>
@@ -54,13 +53,13 @@
 
         navigator.mediaDevices.getUserMedia({ video: true })
             .then(s => { video.srcObject = s; })
-            .catch(() => setStatus('Camera not accessible.', 'danger'));
+            .catch(() => setStatus('Hiện không thể truy cập camera.', 'danger'));
 
         function startRecognition() {
             running = true;
             document.getElementById('start-btn').classList.add('d-none');
             document.getElementById('stop-btn').classList.remove('d-none');
-            setStatus('🔍 Scanning for faces…', 'info');
+            setStatus('🔍 Đang quét khuôn mặt…', 'info');
             sendFrame();
         }
 
