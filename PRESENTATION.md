@@ -31,7 +31,8 @@ Người dùng (Browser)
 │                                     │
 │  [1] YOLOv8n-face  →  có mặt?       │
 │  [2] InsightFace   →  embedding     │
-│  [3] SVM           →  user_id       │
+│  [3] MiniFASNet    →  còn sống?      │
+│  [4] SVM           →  user_id       │
 └──────────────┬──────────────────────┘
                │
                ▼
@@ -54,7 +55,15 @@ Người dùng (Browser)
   - ArcFace: trích xuất vector đặc trưng **512 chiều** (float32)
 - Vector này là "dấu vân tay" khuôn mặt, bất biến với góc, ánh sáng
 
-### Tầng 3 — SVM Classifier
+### Tầng 3 — Anti-Spoofing (Liveness Detection)
+- Model: **MiniFASNet ensemble** (ONNX, CPU inference)
+  - **MiniFASNetV2** (scale 2.7×) + **MiniFASNetV1SE** (scale 4.0×)
+  - Mỗi model nhận crop 80×80 px, output `[p_spoof, p_real]` sau softmax
+  - Ensemble score = trung bình `p_real` của 2 model
+- Ngưỡng: **≥ 0.5** → thật; nếu thấp hơn → trả `spoof`, dừng pipeline
+- Mục đích: chặn tấn công bằng ảnh in, video replay, mask 3D
+
+### Tầng 4 — SVM Classifier
 - Model: **Scikit-learn SVM** (kernel RBF, C=10)
 - Input: embedding 512-d → Output: user_id + confidence %
 - Ngưỡng chấp nhận: **≥ 60% confidence**
@@ -82,8 +91,9 @@ Admin gọi POST /api/training/train
 ### Điểm danh
 ```
 Webcam gửi frame mỗi ~1 giây → POST /api/recognize/frame
-       → YOLO check → ArcFace embed → SVM predict
-       → confidence ≥ 60%? → ghi Attendance vào DB
+       → YOLO check → ArcFace embed → MiniFASNet liveness
+       → spoof? → trả về status: "spoof"
+       → SVM predict → confidence ≥ 60%? → ghi Attendance vào DB
        → trả về: tên, khoa, giờ check-in, confidence
        → chống trùng: bỏ qua nếu đã điểm danh trong 30 phút
 ```
@@ -109,6 +119,7 @@ Webcam gửi frame mỗi ~1 giây → POST /api/recognize/frame
 | Database ORM | **Flask-SQLAlchemy** + SQLite | Lưu trữ dữ liệu |
 | Face detection | **YOLOv8n-face** (Ultralytics) | Gate kiểm tra mặt |
 | Face embedding | **InsightFace + ONNX Runtime** | ArcFace 512-d vector |
+| Liveness / Anti-spoof | **MiniFASNetV2 + MiniFASNetV1SE** (ONNX) | Phát hiện giả mạo |
 | Classifier | **Scikit-learn SVM** | Nhận dạng danh tính |
 | Vision | **OpenCV + NumPy** | Xử lý ảnh |
 | Export | **pandas** | Xuất báo cáo |
@@ -136,9 +147,13 @@ Webcam gửi frame mỗi ~1 giây → POST /api/recognize/frame
 smart-attendance/
 ├── app.py              # Khởi tạo Flask app, đăng ký Blueprint
 ├── models.py           # SQLAlchemy models
-├── face_utils.py       # Toàn bộ ML pipeline
+├── face_utils.py       # ML pipeline (YOLO → ArcFace → AntiSpoof → SVM)
+├── antispoof_utils.py  # MiniFASNet ensemble liveness detection
 ├── config.py           # Cấu hình ứng dụng
 ├── requirements.txt
+├── antispoof_models/   # ONNX weights (tải tự động lần đầu)
+│   ├── MiniFASNetV2.onnx
+│   └── MiniFASNetV1SE.onnx
 ├── routes/
 │   ├── auth.py         # Xác thực JWT
 │   ├── users.py        # Quản lý học sinh + đăng ký khuôn mặt
@@ -161,11 +176,12 @@ smart-attendance/
 
 ## Điểm nổi bật kỹ thuật
 
-1. **Two-stage detection**: YOLO làm gate nhẹ trước, InsightFace chỉ chạy khi cần — tối ưu tốc độ
+1. **Four-stage pipeline**: YOLO gate → ArcFace embed → MiniFASNet liveness → SVM — mỗi tầng lọc sớm, chỉ chạy tầng nặng khi cần
 2. **ArcFace embedding**: vector 512-d mạnh với biến thiên góc và ánh sáng, không cần ảnh chuẩn
-3. **Adaptive classifier**: tự động chọn SVM hoặc cosine similarity tùy số người đăng ký
-4. **Anti-duplicate**: chặn điểm danh trùng trong vòng 30 phút
-5. **Lazy model loading**: YOLO và InsightFace chỉ load vào bộ nhớ lần đầu tiên dùng
+3. **MiniFASNet ensemble**: 2 model ONNX (scale 2.7× + 4.0×) chống giả mạo bằng ảnh in, video replay; ensemble bằng trung bình `p_real`
+4. **Adaptive classifier**: tự động chọn SVM hoặc cosine similarity tùy số người đăng ký
+5. **Anti-duplicate**: chặn điểm danh trùng trong vòng 30 phút
+6. **Lazy model loading**: YOLO, InsightFace và MiniFASNet chỉ load vào bộ nhớ lần đầu tiên dùng; model ONNX tự tải về nếu chưa có
 
 ---
 

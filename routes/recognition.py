@@ -10,7 +10,10 @@ recognition_bp = Blueprint('recognition', __name__)
 
 @recognition_bp.route('/frame', methods=['POST'])
 def process_frame():
-    user_id, confidence = identify_face(request.data)
+    user_id, confidence, is_spoof = identify_face(request.data)
+
+    if is_spoof:
+        return jsonify({'status': 'spoof'})
 
     if user_id is None:
         return jsonify({'status': 'unknown'})

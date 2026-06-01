@@ -68,7 +68,7 @@
             clearTimeout(timer);
             document.getElementById('stop-btn').classList.add('d-none');
             document.getElementById('start-btn').classList.remove('d-none');
-            setStatus('Recognition stopped.', 'secondary');
+            setStatus('Dừng nhận diện.', 'secondary');
         }
 
         async function sendFrame() {
@@ -88,11 +88,13 @@
                         setStatus('✅ ' + data.name + ' — ' + data.department + ' (' + data.confidence + '%)', 'success');
                         addLog(data.name, data.department, data.time, data.confidence);
                     } else if (data.status === 'duplicate') {
-                        setStatus('⚠️ ' + data.name + ' already marked today.', 'warning');
+                        setStatus('⚠️ ' + data.name + ' đã điểm danh hôm nay.', 'warning');
+                    } else if (data.status === 'spoof') {
+                        setStatus('🚨 Phát hiện bất thường — vui lòng nhìn thẳng vào camera.', 'danger');
                     } else if (data.status === 'unknown') {
-                        setStatus('❓ Unknown face detected.', 'danger');
+                        setStatus('❓ Chưa nhận diện được khuôn mặt.', 'secondary');
                     } else {
-                        setStatus('🔍 No face detected — keep looking at the camera.', 'info');
+                        setStatus('🔍 Không phát hiện khuôn mặt — vui lòng nhìn vào camera.', 'info');
                     }
                 } catch (e) {
                     setStatus('Server error: ' + e.message, 'danger');

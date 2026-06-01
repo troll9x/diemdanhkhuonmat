@@ -140,34 +140,49 @@ def retrain_from_db():
 def identify_face(frame_bytes):
     """
     Full recognition pipeline:
-      YOLO gate → InsightFace embed → SVM predict.
-    Returns (user_id, confidence_pct) or (None, 0.0).
+      YOLO gate → InsightFace embed → AntiSpoof check → SVM predict.
+    Returns (user_id, confidence_pct, is_spoof).
+      (None, 0.0, True)  — presentation attack detected
+      (None, 0.0, False) — no face or unrecognised
+      (uid,  conf, False) — recognised real person
     """
     if not os.path.exists(SVM_PATH):
-        return None, 0.0
+        return None, 0.0, False
 
     with open(SVM_PATH, 'rb') as f:
         clf, le = pickle.load(f)
 
     frame = decode_image(frame_bytes)
     if not yolo_has_face(frame):
-        return None, 0.0
+        return None, 0.0, False
 
-    embedding, _ = embed_frame(frame)
-    if embedding is None:
-        return None, 0.0
+    # Inline InsightFace call to retain face.bbox for liveness check
+    app = _get_insight()
+    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    faces = app.get(rgb)
+    if not faces:
+        return None, 0.0, False
+
+    face = max(faces, key=lambda f: f.det_score)
+    embedding = face.normed_embedding.astype(np.float32)
+
+    # Anti-spoofing gate
+    from antispoof_utils import check_liveness
+    is_live, _ = check_liveness(frame, face.bbox)
+    if not is_live:
+        return None, 0.0, True
 
     if isinstance(clf, dict) and clf.get('type') == 'single':
         sim = float(np.dot(embedding, clf['centroid']))
         if sim >= clf['threshold']:
-            return int(clf['user_id']), round(sim * 100, 1)
-        return None, 0.0
+            return int(clf['user_id']), round(sim * 100, 1), False
+        return None, 0.0, False
 
     proba = clf.predict_proba([embedding])[0]
     best_idx = int(np.argmax(proba))
     confidence = float(proba[best_idx])
     if confidence < 0.60:
-        return None, 0.0
+        return None, 0.0, False
 
     user_id = int(le.inverse_transform([best_idx])[0])
-    return user_id, round(confidence * 100, 1)
+    return user_id, round(confidence * 100, 1), False

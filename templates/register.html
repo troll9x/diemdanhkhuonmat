@@ -262,7 +262,7 @@
 
       const btn = document.getElementById('btn-register');
       btn.disabled = true;
-      btn.textContent = 'Saving & Training classifier…';
+      btn.textContent = 'Đang xử lý...';
 
       try {
         const res = await fetch('/api/users/register', {
@@ -279,20 +279,19 @@
 
         if (res.ok) {
           showMsg(
-            `✅ ${name} registered (ID ${data.id}) with ${data.captures_saved} frames. ` +
-            `Classifier trained on ${data.classifier.users} student(s). Redirecting…`,
+            `✅ ${name} đã được đăng ký (ID ${data.id}) với ${data.captures_saved} ảnh. `,
             'success'
           );
           setTimeout(() => window.location.href = '/', 3000);
         } else {
-          showMsg('❌ ' + (data.error || 'Registration failed.'), 'danger');
+          showMsg('❌ ' + (data.error || 'Đăng ký thất bại.'), 'danger');
           btn.disabled = false;
-          btn.textContent = '✅ Register & Train Classifier';
+          btn.textContent = '✅ Đăng ký & Huấn luyện mô hình';
         }
       } catch (e) {
-        showMsg('❌ Server error: ' + e.message, 'danger');
+        showMsg('❌ Lỗi máy chủ: ' + e.message, 'danger');
         btn.disabled = false;
-        btn.textContent = '✅ Register & Train Classifier';
+        btn.textContent = '✅ Đăng ký & Huấn luyện mô hình';
       }
     }
 
