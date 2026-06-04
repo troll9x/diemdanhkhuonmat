@@ -1,0 +1,123 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Lịch giảng dạy - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-calendar-week"></i> {{ page_title or 'Lịch giảng dạy' }}</h2>
+</div>
+
+<div id="loadingState" class="text-center py-5">
+    <div class="spinner-border text-primary"></div>
+    <p class="mt-2 text-muted">Đang tải...</p>
+</div>
+
+<div id="emptyState" class="text-center py-5 d-none">
+    <i class="bi bi-calendar" style="font-size:3rem;color:#ccc;"></i>
+    <p class="text-muted mt-3">Chưa có lịch giảng dạy</p>
+</div>
+
+<!-- Today's sessions -->
+<div id="todaySection" class="mb-4 d-none">
+    <h5 class="mb-3"><i class="bi bi-sun"></i> Hôm nay</h5>
+    <div id="todaySessions" class="row g-3"></div>
+</div>
+
+<!-- Upcoming sessions -->
+<div id="upcomingSection" class="d-none">
+    <h5 class="mb-3"><i class="bi bi-calendar-event"></i> Sắp diễn ra</h5>
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Ngày</th>
+                        <th>Lớp</th>
+                        <th>Môn học</th>
+                        <th>Giờ</th>
+                        <th>Phòng</th>
+                        <th>Trạng thái</th>
+                    </tr>
+                </thead>
+                <tbody id="upcomingTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', loadSchedule);
+
+    async function loadSchedule() {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const nextWeek = new Date(Date.now() + 14*24*60*60*1000).toISOString().split('T')[0];
+
+            const data = await api.get(`/dashboards/lecturer/sessions?date_from=${today}&date_to=${nextWeek}`);
+            const sessions = data.sessions || [];
+
+            document.getElementById('loadingState').classList.add('d-none');
+
+            if (!sessions.length) {
+                document.getElementById('emptyState').classList.remove('d-none');
+                return;
+            }
+
+            const todaySessions = sessions.filter(s => s.session_date === today);
+            const upcomingSessions = sessions.filter(s => s.session_date > today);
+
+            if (todaySessions.length) {
+                document.getElementById('todaySection').classList.remove('d-none');
+                document.getElementById('todaySessions').innerHTML = todaySessions.map(s => `
+                    <div class="col-md-4">
+                        <div class="card border-primary">
+                            <div class="card-body">
+                                <h6 class="card-title text-primary">${escHtml(s.classroom_name || '—')}</h6>
+                                <p class="card-text mb-1"><strong>${escHtml(s.subject_name || '—')}</strong></p>
+                                <p class="card-text mb-1"><i class="bi bi-clock"></i> ${(s.start_time||'').substring(0,5)} - ${(s.end_time||'').substring(0,5)}</p>
+                                <p class="card-text"><i class="bi bi-geo-alt"></i> ${escHtml(s.room_name || 'Chưa xác định')}</p>
+                                ${statusBadge(s.status)}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            if (upcomingSessions.length) {
+                document.getElementById('upcomingSection').classList.remove('d-none');
+                const tbody = document.getElementById('upcomingTable');
+                tbody.innerHTML = upcomingSessions.map(s => `
+                    <tr>
+                        <td>${s.session_date}</td>
+                        <td>${escHtml(s.classroom_name || '—')}</td>
+                        <td>${escHtml(s.subject_name || '—')}</td>
+                        <td>${(s.start_time||'').substring(0,5)} - ${(s.end_time||'').substring(0,5)}</td>
+                        <td>${escHtml(s.room_name || '—')}</td>
+                        <td>${statusBadge(s.status)}</td>
+                    </tr>
+                `).join('');
+            }
+        } catch(e) {
+            document.getElementById('loadingState').innerHTML =
+                `<div class="alert alert-danger">Lỗi: ${e.message}</div>`;
+        }
+    }
+
+    function statusBadge(status) {
+        const map = {
+            scheduled: ['secondary', 'Lên lịch'],
+            ongoing:   ['success',   'Đang diễn ra'],
+            completed: ['primary',   'Hoàn thành'],
+            cancelled: ['danger',    'Đã hủy']
+        };
+        const [cls, label] = map[status] || ['secondary', status];
+        return `<span class="badge bg-${cls}">${label}</span>`;
+    }
+
+    function escHtml(t) {
+        const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML;
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,267 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}QR Attendance - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">QR Code Điểm danh</h5>
+            </div>
+            <div class="card-body text-center">
+                <div id="qr-container" style="padding: 20px;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <p class="text-muted mt-3">Quét mã QR để điểm danh</p>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Link Điểm danh</h5>
+            </div>
+            <div class="card-body">
+                <div class="input-group">
+                    <input type="text" id="attendance-link" class="form-control" readonly>
+                    <button class="btn btn-outline-secondary" onclick="copyLink()">
+                        <i class="bi bi-clipboard"></i> Copy
+                    </button>
+                </div>
+                <small class="text-muted d-block mt-2">Chia sẻ link này với sinh viên để họ có thể điểm danh</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Thông tin Buổi học</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label text-muted">Tên buổi</label>
+                    <p id="session-name" class="fw-bold">—</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Lớp học</label>
+                    <p id="session-classroom" class="fw-bold">—</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Môn học</label>
+                    <p id="session-subject" class="fw-bold">—</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Thời gian</label>
+                    <p id="session-time" class="fw-bold">—</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Trạng thái</label>
+                    <p id="session-status" class="fw-bold"><span class="badge bg-secondary">—</span></p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Thống kê Điểm danh</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label text-muted">Tổng sinh viên</label>
+                    <p id="stat-total" class="fw-bold fs-5">—</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Đã điểm danh</label>
+                    <p id="stat-present" class="fw-bold fs-5 text-success">—</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Chưa điểm danh</label>
+                    <p id="stat-absent" class="fw-bold fs-5 text-danger">—</p>
+                </div>
+                <div class="progress mt-3">
+                    <div id="progress-bar" class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Hành động</h5>
+            </div>
+            <div class="card-body d-grid gap-2">
+                <button class="btn btn-primary" onclick="refreshQR()">
+                    <i class="bi bi-arrow-clockwise"></i> Làm mới QR
+                </button>
+                <button class="btn btn-warning" id="close-btn" onclick="closeSession()" style="display: none;">
+                    <i class="bi bi-x-circle"></i> Đóng buổi học
+                </button>
+                <button class="btn btn-outline-secondary" onclick="goBack()">
+                    <i class="bi bi-arrow-left"></i> Quay lại
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Real-time Student List Modal -->
+<div class="modal fade" id="studentListModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Danh sách Sinh viên</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Tên sinh viên</th>
+                                <th>Mã sinh viên</th>
+                                <th>Trạng thái</th>
+                                <th>Giờ điểm danh</th>
+                            </tr>
+                        </thead>
+                        <tbody id="student-list">
+                            <tr><td colspan="5" class="text-center text-muted py-4">Đang tải...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Require authentication
+    requireAuth();
+
+    // Check if user is lecturer
+    if (!auth.hasRole('lecturer')) {
+        window.location.href = '/';
+    }
+
+    let sessionId = null;
+    let refreshInterval = null;
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Get session ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        sessionId = urlParams.get('session_id') || window.location.pathname.split('/').pop();
+
+        if (!sessionId) {
+            alert('Session ID not found');
+            window.location.href = '/teacher-dashboard';
+            return;
+        }
+
+        await loadSessionInfo();
+        await generateQR();
+        
+        // Refresh stats every 5 seconds
+        refreshInterval = setInterval(async () => {
+            await loadStats();
+        }, 5000);
+    });
+
+    async function loadSessionInfo() {
+        try {
+            const data = await api.getClassSession(sessionId);
+            document.getElementById('session-name').textContent = data.name || '—';
+            document.getElementById('session-classroom').textContent = data.classroom_name || '—';
+            document.getElementById('session-subject').textContent = data.subject_name || '—';
+            document.getElementById('session-time').textContent = formatDateTime(data.start_time) + ' - ' + formatDateTime(data.end_time);
+            
+            const statusBadge = document.querySelector('#session-status .badge');
+            statusBadge.textContent = data.status || 'unknown';
+            statusBadge.className = `badge bg-${data.status === 'active' ? 'success' : data.status === 'pending' ? 'warning' : 'secondary'}`;
+
+            // Show close button if session is active
+            if (data.status === 'active') {
+                document.getElementById('close-btn').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Error loading session info:', error);
+        }
+    }
+
+    async function generateQR() {
+        try {
+            const data = await api.generateQR(sessionId);
+            const qrContainer = document.getElementById('qr-container');
+            
+            // Generate QR code using qrcode.js library
+            qrContainer.innerHTML = '';
+            const qr = new QRCode(qrContainer, {
+                text: data.qr_url || `${window.location.origin}/attendance/qr/${sessionId}`,
+                width: 300,
+                height: 300,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            // Set attendance link
+            document.getElementById('attendance-link').value = data.attendance_url || `${window.location.origin}/attendance/${sessionId}`;
+        } catch (error) {
+            console.error('Error generating QR:', error);
+            document.getElementById('qr-container').innerHTML = '<p class="text-danger">Lỗi tạo QR Code</p>';
+        }
+    }
+
+    async function loadStats() {
+        try {
+            const data = await api.getAttendanceStats(sessionId);
+            document.getElementById('stat-total').textContent = data.total || 0;
+            document.getElementById('stat-present').textContent = data.present || 0;
+            document.getElementById('stat-absent').textContent = data.absent || 0;
+
+            const percentage = data.total > 0 ? Math.round((data.present / data.total) * 100) : 0;
+            document.getElementById('progress-bar').style.width = percentage + '%';
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+
+    function copyLink() {
+        const link = document.getElementById('attendance-link');
+        link.select();
+        document.execCommand('copy');
+        alert('Link đã được sao chép!');
+    }
+
+    async function refreshQR() {
+        await generateQR();
+        alert('QR Code đã được làm mới!');
+    }
+
+    async function closeSession() {
+        if (!confirm('Bạn có chắc chắn muốn đóng buổi học này?')) {
+            return;
+        }
+
+        try {
+            await api.updateClassSession(sessionId, { status: 'closed' });
+            alert('Buổi học đã được đóng!');
+            window.location.href = '/teacher-dashboard';
+        } catch (error) {
+            console.error('Error closing session:', error);
+            alert('Lỗi khi đóng buổi học');
+        }
+    }
+
+    function goBack() {
+        window.location.href = '/teacher-dashboard';
+    }
+</script>
+
+<!-- QR Code Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+{% endblock %}

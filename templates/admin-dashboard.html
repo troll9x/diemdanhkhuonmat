@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Dashboard - Smart Attendance</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .sidebar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: white;
+        }
+        .sidebar h5 {
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .sidebar a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            display: block;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            transition: all 0.3s;
+        }
+        .sidebar a:hover,
+        .sidebar a.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        .navbar {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .stat-card .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-card .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+        }
+        .table {
+            margin-bottom: 0;
+        }
+        .badge {
+            padding: 5px 10px;
+        }
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .content {
+            padding: 20px;
+        }
+        .section {
+            display: none;
+        }
+        .section.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="row g-0">
+        <!-- Sidebar -->
+        <div class="col-md-2 sidebar">
+            <h5>📊 Admin Panel</h5>
+            <a href="#" onclick="showSection('dashboard')" class="nav-link active">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
+            <a href="#" onclick="showSection('users')" class="nav-link">
+                <i class="bi bi-people"></i> Quản lý Người dùng
+            </a>
+            <a href="#" onclick="showSection('departments')" class="nav-link">
+                <i class="bi bi-building"></i> Phòng ban
+            </a>
+            <a href="#" onclick="showSection('classrooms')" class="nav-link">
+                <i class="bi bi-door-closed"></i> Lớp học
+            </a>
+            <a href="#" onclick="showSection('attendance')" class="nav-link">
+                <i class="bi bi-clipboard-check"></i> Điểm danh
+            </a>
+            <a href="#" onclick="showSection('reports')" class="nav-link">
+                <i class="bi bi-file-earmark-pdf"></i> Báo cáo
+            </a>
+            <a href="#" onclick="showSection('system')" class="nav-link">
+                <i class="bi bi-gear"></i> Cài đặt Hệ thống
+            </a>
+            <hr style="border-color: rgba(255, 255, 255, 0.2);">
+            <a href="#" onclick="logout()" class="nav-link">
+                <i class="bi bi-box-arrow-right"></i> Đăng xuất
+            </a>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-10">
+            <!-- Navbar -->
+            <nav class="navbar navbar-expand-lg navbar-light">
+                <div class="container-fluid">
+                    <span class="navbar-brand mb-0 h1">Smart Attendance System</span>
+                    <div class="d-flex align-items-center">
+                        <span id="user-name" class="me-3"></span>
+                        <img id="user-avatar" src="https://via.placeholder.com/40" alt="Avatar" class="rounded-circle" width="40" height="40">
+                    </div>
+                </div>
+            </nav>
+
+            <div class="content">
+                <!-- Dashboard Section -->
+                <div id="dashboard" class="section active">
+                    <h3 class="mb-4">Dashboard</h3>
+                    
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-users">—</div>
+                                <div class="stat-label">Tổng Người dùng</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-students">—</div>
+                                <div class="stat-label">Sinh viên</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-lecturers">—</div>
+                                <div class="stat-label">Giảng viên</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-attendance">—</div>
+                                <div class="stat-label">Điểm danh Hôm nay</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Điểm danh theo Phòng ban</div>
+                                <div class="card-body">
+                                    <canvas id="chart-departments" height="100"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Thống kê Người dùng</div>
+                                <div class="card-body">
+                                    <canvas id="chart-users" height="100"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Users Section -->
+                <div id="users" class="section">
+                    <h3 class="mb-4">Quản lý Người dùng</h3>
+                    
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Danh sách Người dùng</span>
+                            <button class="btn btn-sm btn-primary" onclick="showAddUserModal()">+ Thêm Người dùng</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tên</th>
+                                        <th>Email</th>
+                                        <th>Loại</th>
+                                        <th>Trạng thái</th>
+                                        <th>Hành động</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table">
+                                    <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Departments Section -->
+                <div id="departments" class="section">
+                    <h3 class="mb-4">Quản lý Phòng ban</h3>
+                    
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Danh sách Phòng ban</span>
+                            <button class="btn btn-sm btn-primary" onclick="showAddDepartmentModal()">+ Thêm Phòng ban</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tên</th>
+                                        <th>Mã</th>
+                                        <th>Trạng thái</th>
+                                        <th>Hành động</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="departments-table">
+                                    <tr><td colspan="5" class="text-center text-muted py-4">Đang tải...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Classrooms Section -->
+                <div id="classrooms" class="section">
+                    <h3 class="mb-4">Quản lý Lớp học</h3>
+                    
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Danh sách Lớp học</span>
+                            <button class="btn btn-sm btn-primary" onclick="showAddClassroomModal()">+ Thêm Lớp học</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Tên</th>
+                                        <th>Mã</th>
+                                        <th>Sinh viên</th>
+                                        <th>Trạng thái</th>
+                                        <th>Hành động</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="classrooms-table">
+                                    <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Attendance Section -->
+                <div id="attendance" class="section">
+                    <h3 class="mb-4">Điểm danh</h3>
+                    
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Ngày</label>
+                                    <input type="date" id="filter-date" class="form-control">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Lớp học</label>
+                                    <select id="filter-classroom" class="form-select">
+                                        <option value="">Tất cả lớp</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Trạng thái</label>
+                                    <select id="filter-status" class="form-select">
+                                        <option value="">Tất cả</option>
+                                        <option value="present">Có mặt</option>
+                                        <option value="absent">Vắng</option>
+                                        <option value="late">Trễ</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3 d-flex align-items-end gap-2">
+                                    <button class="btn btn-primary w-100" onclick="loadAttendance()">🔍 Lọc</button>
+                                    <button class="btn btn-outline-secondary w-100" onclick="clearAttendanceFilters()">Xóa</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">Bản ghi Điểm danh</div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Sinh viên</th>
+                                        <th>Lớp</th>
+                                        <th>Ngày</th>
+                                        <th>Giờ</th>
+                                        <th>Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attendance-table">
+                                    <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports Section -->
+                <div id="reports" class="section">
+                    <h3 class="mb-4">Báo cáo</h3>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Báo cáo Excel</h5>
+                                    <p class="card-text text-muted">Xuất dữ liệu điểm danh ra file Excel</p>
+                                    <button class="btn btn-success" onclick="exportExcel()">
+                                        <i class="bi bi-file-earmark-excel"></i> Xuất Excel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Báo cáo PDF</h5>
+                                    <p class="card-text text-muted">Xuất dữ liệu điểm danh ra file PDF</p>
+                                    <button class="btn btn-danger" onclick="exportPDF()">
+                                        <i class="bi bi-file-earmark-pdf"></i> Xuất PDF
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Settings Section -->
+                <div id="system" class="section">
+                    <h3 class="mb-4">Cài đặt Hệ thống</h3>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Thông tin Hệ thống</div>
+                                <div class="card-body" id="system-info">
+                                    <p class="text-muted">Đang tải...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Kiểm tra Sức khỏe</div>
+                                <div class="card-body" id="system-health">
+                                    <p class="text-muted">Đang tải...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+        // Require authentication
+        requireAuth();
+
+        // Check if user is admin
+        if (!auth.hasRole('admin')) {
+            window.location.href = '/';
+        }
+
+        let chartDepartments = null;
+        let chartUsers = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            const user = auth.getUser();
+            document.getElementById('user-name').textContent = user.name;
+            
+            await loadDashboardStats();
+            await loadUsers();
+            await loadDepartments();
+            await loadClassrooms();
+            await loadAttendance();
+            await loadSystemInfo();
+        });
+
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+            
+            document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+            event.target.closest('a').classList.add('active');
+        }
+
+        async function loadDashboardStats() {
+            try {
+                const data = await auth.apiCall('/api/dashboards/admin');
+                document.getElementById('stat-users').textContent = data.users.total;
+                document.getElementById('stat-students').textContent = data.users.students;
+                document.getElementById('stat-lecturers').textContent = data.users.lecturers;
+                document.getElementById('stat-attendance').textContent = data.attendance.today || 0;
+
+                // Build charts
+                buildDepartmentChart(data.attendance.by_department || {});
+                buildUserChart(data.users);
+            } catch (error) {
+                console.error('Error loading dashboard stats:', error);
+            }
+        }
+
+        function buildDepartmentChart(data) {
+            const ctx = document.getElementById('chart-departments');
+            if (chartDepartments) chartDepartments.destroy();
+            
+            chartDepartments = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{
+                        label: 'Điểm danh',
+                        data: Object.values(data),
+                        backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        function buildUserChart(users) {
+            const ctx = document.getElementById('chart-users');
+            if (chartUsers) chartUsers.destroy();
+            
+            chartUsers = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Sinh viên', 'Giảng viên', 'Admin'],
+                    datasets: [{
+                        data: [users.students, users.lecturers, users.admins],
+                        backgroundColor: ['#667eea', '#764ba2', '#f093fb']
+                    }]
+                },
+                options: { responsive: true }
+            });
+        }
+
+        async function loadUsers() {
+            try {
+                const data = await auth.apiCall('/api/students?page=1&per_page=100');
+                const tbody = document.getElementById('users-table');
+                
+                if (!data.students || data.students.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.students.map(u => `
+                    <tr>
+                        <td>${u.id}</td>
+                        <td>${u.full_name}</td>
+                        <td>${u.email || '—'}</td>
+                        <td><span class="badge bg-info">Sinh viên</span></td>
+                        <td>${u.is_active ? '<span class="badge bg-success">Hoạt động</span>' : '<span class="badge bg-danger">Vô hiệu</span>'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editUser(${u.id})">Sửa</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${u.id})">Xóa</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading users:', error);
+            }
+        }
+
+        async function loadDepartments() {
+            try {
+                const data = await auth.apiCall('/api/departments?page=1&per_page=100');
+                const tbody = document.getElementById('departments-table');
+                
+                if (!data.departments || data.departments.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.departments.map(d => `
+                    <tr>
+                        <td>${d.id}</td>
+                        <td>${d.name}</td>
+                        <td>${d.code}</td>
+                        <td>${d.is_active ? '<span class="badge bg-success">Hoạt động</span>' : '<span class="badge bg-danger">Vô hiệu</span>'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editDepartment(${d.id})">Sửa</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteDepartment(${d.id})">Xóa</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading departments:', error);
+            }
+        }
+
+        async function loadClassrooms() {
+            try {
+                const data = await auth.apiCall('/api/classrooms?page=1&per_page=100');
+                const tbody = document.getElementById('classrooms-table');
+                
+                if (!data.classrooms || data.classrooms.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.classrooms.map(c => `
+                    <tr>
+                        <td>${c.id}</td>
+                        <td>${c.name}</td>
+                        <td>${c.code}</td>
+                        <td>${c.student_count || 0}</td>
+                        <td>${c.is_active ? '<span class="badge bg-success">Hoạt động</span>' : '<span class="badge bg-danger">Vô hiệu</span>'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editClassroom(${c.id})">Sửa</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteClassroom(${c.id})">Xóa</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading classrooms:', error);
+            }
+        }
+
+        async function loadAttendance() {
+            try {
+                const date = document.getElementById('filter-date').value;
+                const classroom = document.getElementById('filter-classroom').value;
+                const status = document.getElementById('filter-status').value;
+                
+                let url = '/api/attendance?page=1&per_page=100';
+                if (date) url += `&date=${date}`;
+                if (classroom) url += `&classroom_id=${classroom}`;
+                if (status) url += `&status=${status}`;
+
+                const data = await auth.apiCall(url);
+                const tbody = document.getElementById('attendance-table');
+                
+                if (!data.records || data.records.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.records.map((r, i) => `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${r.student_name || '—'}</td>
+                        <td>${r.classroom_name || '—'}</td>
+                        <td>${formatDate(r.created_at)}</td>
+                        <td>${new Date(r.created_at).toLocaleTimeString('vi-VN')}</td>
+                        <td><span class="badge bg-success">${r.status || 'Có mặt'}</span></td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading attendance:', error);
+            }
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const stats = await auth.apiCall('/api/system/stats');
+                const health = await auth.apiCall('/api/system/health');
+
+                document.getElementById('system-info').innerHTML = `
+                    <p><strong>Người dùng:</strong> ${stats.users.total}</p>
+                    <p><strong>Phòng ban:</strong> ${stats.master_data.departments}</p>
+                    <p><strong>Lớp học:</strong> ${stats.master_data.classrooms}</p>
+                    <p><strong>Kích thước DB:</strong> ${stats.database.size_mb} MB</p>
+                `;
+
+                document.getElementById('system-health').innerHTML = `
+                    <p><strong>Trạng thái:</strong> <span class="badge bg-${health.status === 'healthy' ? 'success' : 'warning'}">${health.status}</span></p>
+                    <p><strong>Database:</strong> ${health.checks.database}</p>
+                    <p><strong>Storage:</strong> ${health.checks.storage}</p>
+                    <p><strong>Models:</strong> ${health.checks.models}</p>
+                `;
+            } catch (error) {
+                console.error('Error loading system info:', error);
+            }
+        }
+
+        function clearAttendanceFilters() {
+            document.getElementById('filter-date').value = '';
+            document.getElementById('filter-classroom').value = '';
+            document.getElementById('filter-status').value = '';
+            loadAttendance();
+        }
+
+        function showAddUserModal() {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function showAddDepartmentModal() {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function showAddClassroomModal() {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function editUser(id) {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function deleteUser(id) {
+            if (confirm('Bạn chắc chắn muốn xóa người dùng này?')) {
+                alert('Tính năng này sẽ được thêm vào');
+            }
+        }
+
+        function editDepartment(id) {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function deleteDepartment(id) {
+            if (confirm('Bạn chắc chắn muốn xóa phòng ban này?')) {
+                alert('Tính năng này sẽ được thêm vào');
+            }
+        }
+
+        function editClassroom(id) {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function deleteClassroom(id) {
+            if (confirm('Bạn chắc chắn muốn xóa lớp học này?')) {
+                alert('Tính năng này sẽ được thêm vào');
+            }
+        }
+
+        function exportExcel() {
+            window.location.href = '/api/reports/attendance/excel';
+        }
+
+        function exportPDF() {
+            window.location.href = '/api/reports/attendance/pdf';
+        }
+
+        async function logout() {
+            await auth.logout();
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>

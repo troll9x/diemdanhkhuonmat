@@ -1,0 +1,117 @@
+{% extends "layouts/base.html" %}
+{% block title %}Import/Export - Smart Attendance{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-arrow-down-up"></i> {{ page_title or 'Import / Export' }}</h2>
+</div>
+
+<div class="row">
+    <!-- Export section -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-download"></i> Xuất dữ liệu</div>
+            <div class="card-body">
+                <p class="text-muted small">Tải xuống dữ liệu hệ thống dưới định dạng Excel hoặc CSV.</p>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Chọn loại dữ liệu</label>
+                    <select id="exportType" class="form-select mb-2">
+                        <option value="students">Sinh viên</option>
+                        <option value="lecturers">Giảng viên</option>
+                        <option value="classrooms">Lớp học</option>
+                        <option value="departments">Phòng ban</option>
+                        <option value="subjects">Môn học</option>
+                    </select>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success" onclick="doExport('excel')">
+                            <i class="bi bi-file-earmark-excel"></i> Excel
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="doExport('csv')">
+                            <i class="bi bi-file-earmark-text"></i> CSV
+                        </button>
+                    </div>
+                </div>
+                <div id="exportResult"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import section -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header"><i class="bi bi-upload"></i> Nhập dữ liệu</div>
+            <div class="card-body">
+                <p class="text-muted small">Tải lên file Excel hoặc CSV để nhập dữ liệu hàng loạt.</p>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Chọn loại dữ liệu</label>
+                    <select id="importType" class="form-select mb-2">
+                        <option value="students">Sinh viên</option>
+                        <option value="lecturers">Giảng viên</option>
+                        <option value="classrooms">Lớp học</option>
+                    </select>
+                    <label class="form-label">File (Excel/CSV)</label>
+                    <input type="file" id="importFile" class="form-control mb-2" accept=".xlsx,.csv">
+                    <button class="btn btn-primary" onclick="doImport()">
+                        <i class="bi bi-cloud-upload"></i> Nhập dữ liệu
+                    </button>
+                </div>
+                <div id="importResult"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header"><i class="bi bi-info-circle"></i> Hướng dẫn</div>
+    <div class="card-body">
+        <ul class="mb-0 text-muted small">
+            <li>File import phải là định dạng .xlsx (Excel) hoặc .csv</li>
+            <li>Hàng đầu tiên phải là tiêu đề cột theo đúng định dạng</li>
+            <li>Dữ liệu trùng lặp sẽ bị bỏ qua hoặc cập nhật tùy theo cài đặt</li>
+            <li>Nên sao lưu dữ liệu trước khi nhập hàng loạt</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function doExport(format) {
+    const type = document.getElementById('exportType').value;
+    const token = auth.getToken();
+    const el = document.getElementById('exportResult');
+    el.innerHTML = '<div class="text-muted small">Đang xuất...</div>';
+    try {
+        const resp = await fetch(`/api/import-export/export/${type}/${format}`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || resp.status); }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `${type}.${format === 'excel' ? 'xlsx' : 'csv'}`; a.click();
+        URL.revokeObjectURL(url);
+        el.innerHTML = '<div class="alert alert-success py-1 mt-2">Xuất thành công!</div>';
+    } catch(e) { el.innerHTML = `<div class="alert alert-danger py-1 mt-2">Lỗi: ${e.message}</div>`; }
+}
+
+async function doImport() {
+    const type = document.getElementById('importType').value;
+    const file = document.getElementById('importFile').files[0];
+    const el = document.getElementById('importResult');
+    if (!file) { el.innerHTML = '<div class="alert alert-warning py-1 mt-2">Vui lòng chọn file</div>'; return; }
+    const token = auth.getToken();
+    el.innerHTML = '<div class="text-muted small">Đang nhập...</div>';
+    try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const resp = await fetch(`/api/import-export/import/${type}`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token },
+            body: fd
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || resp.status);
+        el.innerHTML = `<div class="alert alert-success py-1 mt-2">Nhập thành công: ${data.imported || ''} bản ghi</div>`;
+    } catch(e) { el.innerHTML = `<div class="alert alert-danger py-1 mt-2">Lỗi: ${e.message}</div>`; }
+}
+</script>
+{% endblock %}

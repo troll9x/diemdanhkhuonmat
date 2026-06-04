@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Đăng nhập - Hệ thống Điểm danh Thông minh</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-header h1 {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+        .form-control {
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 10px;
+            font-weight: 600;
+            border-radius: 5px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .btn-login:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+            color: white;
+        }
+        .login-footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .login-footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .login-footer a:hover {
+            text-decoration: underline;
+        }
+        .alert {
+            margin-bottom: 20px;
+        }
+        .spinner-border {
+            width: 1rem;
+            height: 1rem;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>📷 Smart Attendance</h1>
+            <p>Hệ thống Điểm danh Thông minh</p>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <form id="login-form">
+            <div class="mb-3">
+                <label for="username" class="form-label">Tên đăng nhập / Email</label>
+                <input type="text" class="form-control" id="username" placeholder="Nhập tên đăng nhập hoặc email" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Mật khẩu</label>
+                <input type="password" class="form-control" id="password" placeholder="Nhập mật khẩu" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-login" id="login-btn">
+                <span id="btn-text">Đăng nhập</span>
+            </button>
+        </form>
+
+        <div class="login-footer">
+            <p>Chưa có tài khoản? <a href="/">Quay lại trang chủ</a></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+        // Redirect if already logged in
+        if (auth.isAuthenticated()) {
+            redirectToDashboard();
+        }
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                showAlert('Vui lòng nhập tên đăng nhập và mật khẩu', 'warning');
+                return;
+            }
+
+            const loginBtn = document.getElementById('login-btn');
+            const btnText = document.getElementById('btn-text');
+            loginBtn.disabled = true;
+            btnText.innerHTML = '<span class="spinner-border"></span>Đang đăng nhập...';
+
+            try {
+                await auth.login(username, password);
+                showAlert('Đăng nhập thành công!', 'success');
+                setTimeout(() => redirectToDashboard(), 1000);
+            } catch (error) {
+                showAlert(error.message || 'Đăng nhập thất bại', 'danger');
+                loginBtn.disabled = false;
+                btnText.textContent = 'Đăng nhập';
+            }
+        });
+
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            alertContainer.innerHTML = '';
+            alertContainer.appendChild(alertDiv);
+        }
+    </script>
+</body>
+</html>

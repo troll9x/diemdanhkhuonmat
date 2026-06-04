@@ -1,0 +1,290 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Thông báo - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-bell"></i> {{ page_title or 'Thông báo' }}
+        <span class="badge bg-danger ms-2" id="unreadBadge" style="display:none;"></span>
+    </h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sendModal">
+        <i class="bi bi-send"></i> Gửi thông báo
+    </button>
+</div>
+
+<!-- Filter Tabs -->
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link active" href="#" onclick="filterNotifs('all');return false;" id="tab-all">Tất cả</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="#" onclick="filterNotifs('unread');return false;" id="tab-unread">Chưa đọc</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="#" onclick="filterNotifs('read');return false;" id="tab-read">Đã đọc</a>
+    </li>
+    <li class="nav-item ms-auto">
+        <button class="btn btn-sm btn-outline-secondary me-2" onclick="markAllRead()">
+            <i class="bi bi-check2-all"></i> Đánh dấu tất cả đã đọc
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="deleteAllRead()">
+            <i class="bi bi-trash"></i> Xóa đã đọc
+        </button>
+    </li>
+</ul>
+
+<!-- Loading -->
+<div id="loadingState" class="text-center py-5">
+    <div class="spinner-border text-primary"></div>
+    <p class="mt-2 text-muted">Đang tải...</p>
+</div>
+
+<!-- Empty state -->
+<div id="emptyState" class="text-center py-5 d-none">
+    <i class="bi bi-bell-slash" style="font-size:3rem;color:#ccc;"></i>
+    <p class="text-muted mt-3">Không có thông báo nào</p>
+</div>
+
+<!-- Notification list -->
+<div id="notifList" class="d-none"></div>
+
+<!-- Pagination -->
+<nav class="mt-3">
+    <ul class="pagination justify-content-center" id="pagination"></ul>
+</nav>
+
+<!-- Send Notification Modal -->
+<div class="modal fade" id="sendModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Gửi thông báo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Gửi đến</label>
+                    <select id="sendTarget" class="form-select" onchange="toggleTargetId()">
+                        <option value="admins">Tất cả Admin</option>
+                        <option value="lecturers">Tất cả Giảng viên</option>
+                        <option value="students">Tất cả Sinh viên</option>
+                        <option value="specific">Người cụ thể</option>
+                    </select>
+                </div>
+                <div id="specificFields" style="display:none;">
+                    <div class="mb-3">
+                        <label class="form-label">Loại đối tượng</label>
+                        <select id="sendTargetType" class="form-select">
+                            <option value="student">Sinh viên</option>
+                            <option value="lecturer">Giảng viên</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ID người nhận</label>
+                        <input type="number" id="sendTargetId" class="form-control" placeholder="Nhập ID">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Loại thông báo</label>
+                    <select id="sendType" class="form-select">
+                        <option value="info">Thông tin</option>
+                        <option value="success">Thành công</option>
+                        <option value="warning">Cảnh báo</option>
+                        <option value="error">Lỗi</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Tiêu đề <span class="text-danger">*</span></label>
+                    <input type="text" id="sendTitle" class="form-control" placeholder="Tiêu đề thông báo">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nội dung <span class="text-danger">*</span></label>
+                    <textarea id="sendMessage" class="form-control" rows="4" placeholder="Nội dung thông báo"></textarea>
+                </div>
+                <div id="sendError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" onclick="sendNotification()">
+                    <i class="bi bi-send"></i> Gửi
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentFilter = 'all';
+    let currentPage = 1;
+
+    document.addEventListener('DOMContentLoaded', () => loadNotifications());
+
+    async function loadNotifications(page = 1) {
+        currentPage = page;
+        showLoading(true);
+        try {
+            const params = new URLSearchParams({ page, per_page: 20 });
+            if (currentFilter === 'unread') params.set('is_read', 'false');
+            if (currentFilter === 'read') params.set('is_read', 'true');
+
+            const data = await api.get('/notifications/admin/all?' + params.toString());
+            const notifs = data.notifications || [];
+
+            // Update unread badge via separate call
+            const myData = await api.get('/notifications?per_page=1');
+            const unread = myData.unread_count || 0;
+            const badge = document.getElementById('unreadBadge');
+            if (unread > 0) {
+                badge.textContent = unread;
+                badge.style.display = '';
+            } else {
+                badge.style.display = 'none';
+            }
+
+            if (!notifs.length) {
+                showEmpty(true);
+                return;
+            }
+            showEmpty(false);
+
+            const container = document.getElementById('notifList');
+            container.innerHTML = notifs.map(n => `
+                <div class="card mb-2 ${n.is_read ? '' : 'border-primary'}">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <span class="badge bg-${typeColor(n.type)} me-2">${n.type}</span>
+                                <strong>${escHtml(n.title)}</strong>
+                                ${!n.is_read ? '<span class="badge bg-primary ms-1">Mới</span>' : ''}
+                                <br>
+                                <small class="text-muted">${escHtml(n.message)}</small>
+                                <br>
+                                <small class="text-muted">${n.user_type}#${n.user_id} · ${n.created_at}</small>
+                            </div>
+                            <div class="d-flex gap-1 ms-3">
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteNotif(${n.id})" title="Xóa">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            container.classList.remove('d-none');
+
+            renderPagination(data.pagination);
+        } catch(e) {
+            console.error(e);
+            document.getElementById('notifList').innerHTML =
+                `<div class="alert alert-danger">Lỗi tải dữ liệu: ${e.message}</div>`;
+            document.getElementById('notifList').classList.remove('d-none');
+            showEmpty(false);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function typeColor(t) {
+        return {info:'info', success:'success', warning:'warning', error:'danger'}[t] || 'secondary';
+    }
+
+    function filterNotifs(f) {
+        currentFilter = f;
+        ['all','unread','read'].forEach(id => {
+            document.getElementById('tab-'+id).classList.remove('active');
+        });
+        document.getElementById('tab-'+f).classList.add('active');
+        loadNotifications(1);
+    }
+
+    async function markAllRead() {
+        try {
+            await api.put('/notifications/read-all', {});
+            loadNotifications(currentPage);
+        } catch(e) { alert('Lỗi: ' + e.message); }
+    }
+
+    async function deleteAllRead() {
+        if (!confirm('Xóa tất cả thông báo đã đọc?')) return;
+        try {
+            await api.delete('/notifications/delete-read');
+            loadNotifications(1);
+        } catch(e) { alert('Lỗi: ' + e.message); }
+    }
+
+    async function deleteNotif(id) {
+        try {
+            await api.delete(`/notifications/admin/${id}`);
+            loadNotifications(currentPage);
+        } catch(e) { alert('Lỗi: ' + e.message); }
+    }
+
+    function toggleTargetId() {
+        const v = document.getElementById('sendTarget').value;
+        document.getElementById('specificFields').style.display = v === 'specific' ? '' : 'none';
+    }
+
+    async function sendNotification() {
+        const title = document.getElementById('sendTitle').value.trim();
+        const message = document.getElementById('sendMessage').value.trim();
+        const target = document.getElementById('sendTarget').value;
+        const type = document.getElementById('sendType').value;
+        const errEl = document.getElementById('sendError');
+
+        if (!title || !message) {
+            errEl.textContent = 'Tiêu đề và nội dung là bắt buộc';
+            errEl.classList.remove('d-none');
+            return;
+        }
+        errEl.classList.add('d-none');
+
+        const body = { title, message, type, target };
+        if (target === 'specific') {
+            body.target_type = document.getElementById('sendTargetType').value;
+            body.target_id = parseInt(document.getElementById('sendTargetId').value);
+        }
+
+        try {
+            const data = await api.post('/notifications', body);
+            bootstrap.Modal.getInstance(document.getElementById('sendModal')).hide();
+            document.getElementById('sendTitle').value = '';
+            document.getElementById('sendMessage').value = '';
+            alert(`Đã gửi thông báo tới ${data.count} người`);
+            loadNotifications(1);
+        } catch(e) {
+            errEl.textContent = 'Lỗi gửi: ' + e.message;
+            errEl.classList.remove('d-none');
+        }
+    }
+
+    function renderPagination(p) {
+        const ul = document.getElementById('pagination');
+        if (!p || p.pages <= 1) { ul.innerHTML = ''; return; }
+        let html = `<li class="page-item ${!p.has_prev?'disabled':''}">
+            <a class="page-link" onclick="loadNotifications(${p.page-1})">‹</a></li>`;
+        for (let i = 1; i <= p.pages; i++) {
+            html += `<li class="page-item ${i===p.page?'active':''}">
+                <a class="page-link" onclick="loadNotifications(${i})">${i}</a></li>`;
+        }
+        html += `<li class="page-item ${!p.has_next?'disabled':''}">
+            <a class="page-link" onclick="loadNotifications(${p.page+1})">›</a></li>`;
+        ul.innerHTML = html;
+    }
+
+    function showLoading(on) {
+        document.getElementById('loadingState').classList.toggle('d-none', !on);
+    }
+    function showEmpty(on) {
+        document.getElementById('emptyState').classList.toggle('d-none', !on);
+        document.getElementById('notifList').classList.toggle('d-none', on);
+    }
+    function escHtml(t) {
+        const d = document.createElement('div');
+        d.textContent = t || '';
+        return d.innerHTML;
+    }
+</script>
+{% endblock %}

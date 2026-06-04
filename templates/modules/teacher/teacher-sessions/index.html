@@ -1,0 +1,308 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Buổi học - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-calendar-event"></i> {{ page_title or 'Buổi học' }}</h2>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <select id="filterStatus" class="form-select">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="scheduled">Lên lịch</option>
+                    <option value="ongoing">Đang diễn ra</option>
+                    <option value="completed">Hoàn thành</option>
+                    <option value="cancelled">Đã hủy</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <input type="date" id="filterDateFrom" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <input type="date" id="filterDateTo" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary w-100" onclick="loadSessions()">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="loadingState" class="text-center py-5 d-none">
+    <div class="spinner-border text-primary"></div>
+    <p class="mt-2 text-muted">Đang tải...</p>
+</div>
+<div id="emptyState" class="text-center py-5 d-none">
+    <i class="bi bi-calendar-x" style="font-size:3rem;color:#ccc;"></i>
+    <p class="text-muted mt-3">Không có buổi học nào</p>
+</div>
+
+<div id="tableContainer" class="d-none">
+    <div class="card">
+        <div class="card-header"><i class="bi bi-list-ul"></i> Danh sách buổi học</div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Lớp học</th><th>Môn học</th><th>Ngày</th><th>Giờ</th>
+                        <th>Điểm danh</th><th>Trạng thái</th><th>Hành động</th>
+                    </tr>
+                </thead>
+                <tbody id="sessionsTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── Live Attendance Panel ─────────────────────────────────────────────── -->
+<div id="livePanel" class="d-none mt-4">
+    <div class="card border-success">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-broadcast"></i> Điểm danh đang diễn ra — <strong id="liveSessionName"></strong></span>
+            <div>
+                <span class="badge bg-light text-dark me-2" id="liveTimer">00:00</span>
+                <button class="btn btn-sm btn-danger" onclick="endAttendance()">
+                    <i class="bi bi-stop-circle"></i> Kết thúc
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row text-center mb-3">
+                <div class="col-3">
+                    <div class="fs-1 fw-bold text-primary"  id="liveTotal">—</div>
+                    <small class="text-muted">Tổng SV</small>
+                </div>
+                <div class="col-3">
+                    <div class="fs-1 fw-bold text-success" id="livePresent">—</div>
+                    <small class="text-muted">Có mặt</small>
+                </div>
+                <div class="col-3">
+                    <div class="fs-1 fw-bold text-warning" id="liveLate">—</div>
+                    <small class="text-muted">Muộn</small>
+                </div>
+                <div class="col-3">
+                    <div class="fs-1 fw-bold text-danger"  id="liveAbsent">—</div>
+                    <small class="text-muted">Vắng</small>
+                </div>
+            </div>
+            <div class="progress mb-3" style="height:10px;">
+                <div id="liveProgressBar" class="progress-bar bg-success" style="width:0%"></div>
+            </div>
+
+            <!-- QR Code -->
+            <div class="text-center mb-3">
+                <p class="text-muted small">Link điểm danh:
+                    <a id="liveCheckinLink" href="#" target="_blank" class="fw-bold"></a>
+                </p>
+                <div id="liveQR" class="d-inline-block p-2 border rounded bg-white"></div>
+            </div>
+
+            <!-- Live records table -->
+            <div class="table-responsive mt-3">
+                <table class="table table-sm">
+                    <thead class="table-light">
+                        <tr><th>Mã SV</th><th>Họ tên</th><th>Giờ điểm danh</th><th>Trạng thái</th><th>Độ chính xác</th></tr>
+                    </thead>
+                    <tbody id="liveRecordsTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+    let liveSessionId = null;
+    let liveInterval  = null;
+    let timerInterval = null;
+    let timerSeconds  = 0;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const today = new Date().toISOString().split('T')[0];
+        const ago30 = new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];
+        document.getElementById('filterDateFrom').value = ago30;
+        document.getElementById('filterDateTo').value   = today;
+        loadSessions();
+    });
+
+    async function loadSessions() {
+        document.getElementById('loadingState').classList.remove('d-none');
+        document.getElementById('tableContainer').classList.add('d-none');
+        document.getElementById('emptyState').classList.add('d-none');
+        try {
+            const p = new URLSearchParams();
+            const st = document.getElementById('filterStatus').value;
+            const df = document.getElementById('filterDateFrom').value;
+            const dt = document.getElementById('filterDateTo').value;
+            if (st) p.set('status', st);
+            if (df) p.set('date_from', df);
+            if (dt) p.set('date_to',   dt);
+
+            const data = await api.get('/dashboards/lecturer/sessions?' + p.toString());
+            const sessions = data.sessions || [];
+            document.getElementById('loadingState').classList.add('d-none');
+            if (!sessions.length) { document.getElementById('emptyState').classList.remove('d-none'); return; }
+
+            const tbody = document.getElementById('sessionsTable');
+            tbody.innerHTML = sessions.map(s => `
+                <tr id="row-${s.id}">
+                    <td>${esc(s.classroom || s.classroom_name)}</td>
+                    <td>${esc(s.subject   || s.subject_name)}</td>
+                    <td>${s.session_date || '—'}</td>
+                    <td>${(s.start_time||'').substring(0,5)} – ${(s.end_time||'').substring(0,5)}</td>
+                    <td><span class="badge bg-secondary">${s.attendance_count ?? 0}</span></td>
+                    <td>${statusBadge(s.status)}</td>
+                    <td>${actionBtn(s)}</td>
+                </tr>
+            `).join('');
+            document.getElementById('tableContainer').classList.remove('d-none');
+        } catch(e) {
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('emptyState').classList.remove('d-none');
+            console.error(e);
+        }
+    }
+
+    function actionBtn(s) {
+        if (s.status === 'scheduled') {
+            return `<button class="btn btn-sm btn-success" onclick="startAttendance(${s.id},'${esc(s.classroom||'')} – ${esc(s.subject||'')}')">
+                        <i class="bi bi-play-circle"></i> Bắt đầu điểm danh
+                    </button>`;
+        }
+        if (s.status === 'ongoing') {
+            return `<button class="btn btn-sm btn-warning" onclick="resumeLive(${s.id},'${esc(s.classroom||'')} – ${esc(s.subject||'')}')">
+                        <i class="bi bi-broadcast"></i> Xem live
+                    </button>
+                    <button class="btn btn-sm btn-danger ms-1" onclick="endAttendance()">Kết thúc</button>`;
+        }
+        if (s.status === 'completed') {
+            return `<a href="/attendance/checkin/${s.id}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-eye"></i> Xem
+                    </a>`;
+        }
+        return '—';
+    }
+
+    async function startAttendance(sessionId, name) {
+        try {
+            const res = await api.post('/class-sessions/' + sessionId + '/start', {});
+            if (res.checkin_url) {
+                alert(`✅ Điểm danh đã mở! Đã thông báo ${res.students_notified} sinh viên.`);
+                openLivePanel(sessionId, name, res.checkin_url);
+                loadSessions(); // refresh table
+            }
+        } catch(e) {
+            alert('Lỗi: ' + e.message);
+        }
+    }
+
+    async function resumeLive(sessionId, name) {
+        openLivePanel(sessionId, name, '/attendance/checkin/' + sessionId);
+    }
+
+    function openLivePanel(sessionId, name, checkinUrl) {
+        liveSessionId = sessionId;
+        document.getElementById('liveSessionName').textContent = name;
+        document.getElementById('livePanel').classList.remove('d-none');
+        document.getElementById('livePanel').scrollIntoView({ behavior: 'smooth' });
+
+        // Build full URL
+        const fullUrl = window.location.origin + checkinUrl;
+        const linkEl = document.getElementById('liveCheckinLink');
+        linkEl.href = fullUrl;
+        linkEl.textContent = fullUrl;
+
+        // Generate QR
+        const qrEl = document.getElementById('liveQR');
+        qrEl.innerHTML = '';
+        new QRCode(qrEl, { text: fullUrl, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.H });
+
+        // Start live polling every 5 s
+        if (liveInterval) clearInterval(liveInterval);
+        pollLiveStats();
+        liveInterval = setInterval(pollLiveStats, 5000);
+
+        // Start timer
+        timerSeconds = 0;
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timerSeconds++;
+            const m = String(Math.floor(timerSeconds/60)).padStart(2,'0');
+            const s = String(timerSeconds % 60).padStart(2,'0');
+            document.getElementById('liveTimer').textContent = m + ':' + s;
+        }, 1000);
+    }
+
+    async function pollLiveStats() {
+        if (!liveSessionId) return;
+        try {
+            const d = await api.get('/class-sessions/' + liveSessionId + '/live-stats');
+            document.getElementById('liveTotal').textContent   = d.total_enrolled;
+            document.getElementById('livePresent').textContent = d.present;
+            document.getElementById('liveLate').textContent    = d.late;
+            document.getElementById('liveAbsent').textContent  = d.absent;
+
+            const pct = d.rate || 0;
+            document.getElementById('liveProgressBar').style.width = pct + '%';
+
+            const tbody = document.getElementById('liveRecordsTable');
+            if (!d.records.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Chưa có sinh viên nào điểm danh</td></tr>';
+            } else {
+                tbody.innerHTML = d.records.map(r => `
+                    <tr>
+                        <td><code>${r.student_code}</code></td>
+                        <td>${esc(r.full_name)}</td>
+                        <td>${r.attendance_time || '—'}</td>
+                        <td>${statusBadge(r.status)}</td>
+                        <td>${r.confidence != null ? r.confidence + '%' : '—'}</td>
+                    </tr>
+                `).join('');
+            }
+
+            if (d.status === 'completed') {
+                stopLive();
+                alert('Buổi học đã kết thúc.');
+            }
+        } catch(e) { console.error('Live poll error:', e); }
+    }
+
+    async function endAttendance() {
+        if (!liveSessionId) return;
+        if (!confirm('Kết thúc điểm danh?')) return;
+        try {
+            const res = await api.post('/class-sessions/' + liveSessionId + '/end', {});
+            alert(`✅ Đã kết thúc. Có mặt: ${res.present}/${res.total_enrolled}`);
+            stopLive();
+            loadSessions();
+        } catch(e) { alert('Lỗi: ' + e.message); }
+    }
+
+    function stopLive() {
+        if (liveInterval)  clearInterval(liveInterval);
+        if (timerInterval) clearInterval(timerInterval);
+        liveInterval = timerInterval = null;
+        document.getElementById('livePanel').classList.add('d-none');
+        liveSessionId = null;
+    }
+
+    function statusBadge(s) {
+        const m = { scheduled:'secondary',ongoing:'warning',completed:'success',cancelled:'danger',
+                    present:'success',late:'warning',absent:'danger',excused:'info' };
+        const l = { scheduled:'Lên lịch',ongoing:'Đang học',completed:'Hoàn thành',cancelled:'Hủy',
+                    present:'Có mặt',late:'Muộn',absent:'Vắng',excused:'Xin phép' };
+        return `<span class="badge bg-${m[s]||'secondary'}">${l[s]||s}</span>`;
+    }
+
+    function esc(t) { const d=document.createElement('div');d.textContent=t||'';return d.innerHTML; }
+</script>
+{% endblock %}

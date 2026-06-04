@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login - Smart Attendance System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-header h1 {
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .login-header p {
+            color: #666;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .form-control {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-size: 14px;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 10px;
+            border-radius: 5px;
+            width: 100%;
+            margin-top: 20px;
+        }
+        .btn-login:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+            color: white;
+        }
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .alert {
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .spinner-border {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <h1>🎓 Smart Attendance</h1>
+            <p>Hệ thống điểm danh thông minh</p>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <form id="login-form" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="username" class="form-label">Tên đăng nhập</label>
+                <input type="text" class="form-control" id="username" name="username" required placeholder="Nhập tên đăng nhập">
+            </div>
+
+            <div class="form-group">
+                <label for="password" class="form-label">Mật khẩu</label>
+                <input type="password" class="form-control" id="password" name="password" required placeholder="Nhập mật khẩu">
+            </div>
+
+            <div class="loading-spinner" id="loading-spinner">
+                <div class="spinner-border spinner-border-sm" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-login" id="login-btn">
+                <i class="bi bi-box-arrow-in-right"></i> Đăng nhập
+            </button>
+        </form>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/services/api.js') }}"></script>
+    <script>
+        // Do not auto-redirect from login page.
+        // This prevents continuous reload/redirect loops when a stale token exists in localStorage/cookie.
+        // User must explicitly submit login again to refresh the session.
+
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('login-btn');
+            const spinner = document.getElementById('loading-spinner');
+            const alertContainer = document.getElementById('alert-container');
+
+            // Clear previous alerts
+            alertContainer.innerHTML = '';
+
+            // Show loading
+            loginBtn.disabled = true;
+            spinner.style.display = 'block';
+
+            try {
+                const data = await api.login(username, password);
+                
+                console.log('Login response:', data);
+                
+                // Store tokens and user info
+                auth.setTokens(data.access_token, data.refresh_token);
+                auth.setUser(data.user);
+
+                // Set cookie for page navigation (so dashboard can access token)
+                document.cookie = `access_token=${data.access_token}; path=/; max-age=86400`; // 24 hours
+
+                // Show success message
+                showAlert('Đăng nhập thành công!', 'success');
+
+                // Redirect to appropriate dashboard after a short delay
+                setTimeout(() => {
+                    console.log('Attempting redirect with user:', auth.getUser());
+                    redirectToDashboard();
+                }, 500);
+            } catch (error) {
+                console.error('Login error:', error);
+                showAlert(error.message || 'Đăng nhập thất bại. Vui lòng kiểm tra tên đăng nhập và mật khẩu.', 'danger');
+            } finally {
+                loginBtn.disabled = false;
+                spinner.style.display = 'none';
+            }
+        }
+
+        function showAlert(message, type = 'info') {
+            const alertContainer = document.getElementById('alert-container');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            alertContainer.appendChild(alertDiv);
+        }
+    </script>
+</body>
+</html>
