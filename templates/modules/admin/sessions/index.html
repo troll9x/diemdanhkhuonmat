@@ -1,0 +1,158 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Quản lý Buổi học - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ page_title or 'Quản lý Buổi học' }}</h1>
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#generateModal">
+        <i class="bi bi-gear"></i> Tạo buổi học từ TKB
+    </button>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <input type="date" id="filterDate" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <select id="filterClassroom" class="form-select">
+                    <option value="">Tất cả lớp</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="filterStatus" class="form-select">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="scheduled">Lên lịch</option>
+                    <option value="ongoing">Đang diễn ra</option>
+                    <option value="completed">Hoàn thành</option>
+                    <option value="cancelled">Hủy</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-outline-secondary w-100" onclick="loadSessions()">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" class="text-center d-none">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Đang tải...</span>
+    </div>
+    <p class="mt-2">Đang tải dữ liệu...</p>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="text-center d-none py-5">
+    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+    <p class="text-muted mt-3">Không có buổi học nào</p>
+</div>
+
+<!-- Data Table -->
+<div id="tableContainer" class="d-none">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Ngày</th>
+                    <th>Giờ</th>
+                    <th>Lớp</th>
+                    <th>Môn</th>
+                    <th>Phòng</th>
+                    <th>Trạng thái</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody id="sessionsTable">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Generate Modal -->
+<div class="modal fade" id="generateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Tạo buổi học</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="generateForm" onsubmit="generateSessions(event)">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="genStartDate" class="form-label">Từ ngày *</label>
+                        <input type="date" id="genStartDate" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="genEndDate" class="form-label">Đến ngày *</label>
+                        <input type="date" id="genEndDate" class="form-control" required>
+                    </div>
+                    <div class="alert alert-info">
+                        <small>Hệ thống sẽ tạo buổi học dựa trên lịch học (TKB) hoạt động.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary" id="genSubmitBtn">
+                        <span id="genSubmitBtnText">Tạo</span>
+                        <span id="genSubmitBtnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Update Status Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cập nhật trạng thái</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="statusForm" onsubmit="saveStatus(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="statusSessionId">
+                    <div class="mb-3">
+                        <label for="statusSelect" class="form-label">Trạng thái *</label>
+                        <select id="statusSelect" class="form-select" required>
+                            <option value="scheduled">Lên lịch</option>
+                            <option value="ongoing">Đang diễn ra</option>
+                            <option value="completed">Hoàn thành</option>
+                            <option value="cancelled">Hủy</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Alert for notifications -->
+<div id="alertContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/admin/sessions.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('filterDate').value = today;
+
+        loadClassrooms();
+        loadSessions();
+    });
+</script>
+{% endblock %}

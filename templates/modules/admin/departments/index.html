@@ -1,0 +1,143 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Quản lý Phòng ban - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ page_title or 'Quản lý Phòng ban' }}</h1>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#departmentModal" onclick="resetDepartmentForm()">
+        <i class="bi bi-plus"></i> Thêm mới
+    </button>
+</div>
+
+<!-- Search & Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <input type="text" id="searchInput" class="form-control" placeholder="Tìm kiếm theo tên hoặc mã">
+            </div>
+            <div class="col-md-4">
+                <select id="filterActive" class="form-select">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="true">Hoạt động</option>
+                    <option value="false">Không hoạt động</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-secondary w-100" onclick="loadDepartments()">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" class="text-center d-none">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Đang tải...</span>
+    </div>
+    <p class="mt-2">Đang tải dữ liệu...</p>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="text-center d-none py-5">
+    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+    <p class="text-muted mt-3">Không có phòng ban nào</p>
+</div>
+
+<!-- Data Table -->
+<div id="tableContainer" class="d-none">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã</th>
+                    <th>Tên</th>
+                    <th>Mô tả</th>
+                    <th>Trạng thái</th>
+                    <th>Ngày tạo</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody id="departmentsTable">
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <nav id="paginationContainer" class="mt-4 d-none">
+        <ul class="pagination justify-content-center" id="paginationList">
+        </ul>
+    </nav>
+</div>
+
+<!-- Create/Edit Modal -->
+<div class="modal fade" id="departmentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Thêm mới phòng ban</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="departmentForm" onsubmit="saveDepartment(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="departmentId">
+
+                    <div class="mb-3">
+                        <label for="deptCode" class="form-label">Mã phòng ban *</label>
+                        <input type="text" id="deptCode" class="form-control" placeholder="VD: CNTT" required>
+                        <small class="form-text text-danger d-none" id="codeError"></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="deptName" class="form-label">Tên phòng ban *</label>
+                        <input type="text" id="deptName" class="form-control" placeholder="VD: Công nghệ Thông tin" required>
+                        <small class="form-text text-danger d-none" id="nameError"></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="deptDescription" class="form-label">Mô tả</label>
+                        <textarea id="deptDescription" class="form-control" rows="3" placeholder="Mô tả về phòng ban"></textarea>
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" id="deptActive" class="form-check-input" checked>
+                        <label class="form-check-label" for="deptActive">
+                            Hoạt động
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span id="submitBtnText">Lưu</span>
+                        <span id="submitBtnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Alert for notifications -->
+<div id="alertContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/admin/departments.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDepartments();
+
+        // Search on Enter
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loadDepartments();
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Quản lý Thời khóa biểu - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ page_title or 'Quản lý Thời khóa biểu' }}</h1>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#scheduleModal" onclick="resetScheduleForm()">
+        <i class="bi bi-plus"></i> Thêm mới
+    </button>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4">
+                <select id="filterClassroom" class="form-select">
+                    <option value="">Tất cả lớp học</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <select id="filterActive" class="form-select">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="true">Hoạt động</option>
+                    <option value="false">Không hoạt động</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-outline-secondary w-100" onclick="loadSchedules()">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" class="text-center d-none">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Đang tải...</span>
+    </div>
+    <p class="mt-2">Đang tải dữ liệu...</p>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="text-center d-none py-5">
+    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+    <p class="text-muted mt-3">Không có thời khóa biểu nào</p>
+</div>
+
+<!-- Data Table -->
+<div id="tableContainer" class="d-none">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Lớp</th>
+                    <th>Môn học</th>
+                    <th>Thứ</th>
+                    <th>Thời gian</th>
+                    <th>Phòng</th>
+                    <th>Trạng thái</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody id="schedulesTable">
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Create/Edit Modal -->
+<div class="modal fade" id="scheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Thêm mới thời khóa biểu</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="scheduleForm" onsubmit="saveSchedule(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="scheduleId">
+
+                    <div class="mb-3">
+                        <label for="schClassroom" class="form-label">Lớp học *</label>
+                        <select id="schClassroom" class="form-select" required>
+                            <option value="">-- Chọn lớp --</option>
+                        </select>
+                        <small class="form-text text-danger d-none" id="classroomError"></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="schSubject" class="form-label">Môn học *</label>
+                        <select id="schSubject" class="form-select" required>
+                            <option value="">-- Chọn môn --</option>
+                        </select>
+                        <small class="form-text text-danger d-none" id="subjectError"></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="schRoom" class="form-label">Phòng học</label>
+                        <select id="schRoom" class="form-select">
+                            <option value="">-- Chọn phòng --</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="schDay" class="form-label">Thứ trong tuần *</label>
+                        <select id="schDay" class="form-select" required>
+                            <option value="">-- Chọn thứ --</option>
+                            <option value="1">Thứ 2 (Monday)</option>
+                            <option value="2">Thứ 3 (Tuesday)</option>
+                            <option value="3">Thứ 4 (Wednesday)</option>
+                            <option value="4">Thứ 5 (Thursday)</option>
+                            <option value="5">Thứ 6 (Friday)</option>
+                            <option value="6">Thứ 7 (Saturday)</option>
+                            <option value="7">Chủ nhật (Sunday)</option>
+                        </select>
+                        <small class="form-text text-danger d-none" id="dayError"></small>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="schStartTime" class="form-label">Giờ bắt đầu *</label>
+                            <input type="time" id="schStartTime" class="form-control" required>
+                            <small class="form-text text-danger d-none" id="startTimeError"></small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="schEndTime" class="form-label">Giờ kết thúc *</label>
+                            <input type="time" id="schEndTime" class="form-control" required>
+                            <small class="form-text text-danger d-none" id="endTimeError"></small>
+                        </div>
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" id="schActive" class="form-check-input" checked>
+                        <label class="form-check-label" for="schActive">
+                            Hoạt động
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span id="submitBtnText">Lưu</span>
+                        <span id="submitBtnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Alert for notifications -->
+<div id="alertContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/admin/schedules.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadClassrooms();
+        loadSubjects();
+        loadRooms();
+        loadSchedules();
+    });
+</script>
+{% endblock %}

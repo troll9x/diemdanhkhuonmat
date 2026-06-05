@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lecturer Dashboard - Smart Attendance</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .navbar-brand {
+            color: white !important;
+            font-weight: bold;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .stat-card .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-card .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+        }
+        .table {
+            margin-bottom: 0;
+        }
+        .badge {
+            padding: 5px 10px;
+        }
+        .content {
+            padding: 20px;
+        }
+        .section {
+            display: none;
+        }
+        .section.active {
+            display: block;
+        }
+        .nav-tabs {
+            border-bottom: 2px solid #dee2e6;
+        }
+        .nav-tabs .nav-link {
+            color: #666;
+            border: none;
+            border-bottom: 3px solid transparent;
+        }
+        .nav-tabs .nav-link.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            background: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">📷 Smart Attendance</span>
+            <div class="d-flex align-items-center gap-3">
+                <span id="user-name" class="text-white"></span>
+                <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                    <i class="bi bi-box-arrow-right"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="container-fluid">
+            <h2 class="mb-4">Dashboard Giảng viên</h2>
+
+            <!-- Stats -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-classes">—</div>
+                        <div class="stat-label">Lớp học</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-students">—</div>
+                        <div class="stat-label">Sinh viên</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-sessions">—</div>
+                        <div class="stat-label">Buổi học</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-attendance">—</div>
+                        <div class="stat-label">Điểm danh Hôm nay</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <ul class="nav nav-tabs mb-4" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" href="#" onclick="showSection('classes')" role="tab">
+                        <i class="bi bi-door-closed"></i> Lớp học
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" onclick="showSection('sessions')" role="tab">
+                        <i class="bi bi-calendar-event"></i> Buổi học
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" onclick="showSection('attendance')" role="tab">
+                        <i class="bi bi-clipboard-check"></i> Điểm danh
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" onclick="showSection('reports')" role="tab">
+                        <i class="bi bi-file-earmark-pdf"></i> Báo cáo
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Classes Section -->
+            <div id="classes" class="section active">
+                <div class="card">
+                    <div class="card-header">Lớp học của tôi</div>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Lớp</th>
+                                    <th>Mã</th>
+                                    <th>Sinh viên</th>
+                                    <th>Môn học</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody id="classes-table">
+                                <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sessions Section -->
+            <div id="sessions" class="section">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Lớp học</label>
+                                <select id="filter-classroom" class="form-select">
+                                    <option value="">Tất cả lớp</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Ngày</label>
+                                <input type="date" id="filter-date" class="form-control">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end gap-2">
+                                <button class="btn btn-primary w-100" onclick="loadSessions()">🔍 Lọc</button>
+                                <button class="btn btn-outline-secondary w-100" onclick="clearSessionFilters()">Xóa</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Buổi học</span>
+                        <button class="btn btn-sm btn-primary" onclick="showAddSessionModal()">+ Thêm Buổi học</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Lớp</th>
+                                    <th>Ngày</th>
+                                    <th>Giờ bắt đầu</th>
+                                    <th>Giờ kết thúc</th>
+                                    <th>Trạng thái</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sessions-table">
+                                <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Section -->
+            <div id="attendance" class="section">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Lớp học</label>
+                                <select id="filter-att-classroom" class="form-select">
+                                    <option value="">Tất cả lớp</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Ngày</label>
+                                <input type="date" id="filter-att-date" class="form-control">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Trạng thái</label>
+                                <select id="filter-att-status" class="form-select">
+                                    <option value="">Tất cả</option>
+                                    <option value="present">Có mặt</option>
+                                    <option value="absent">Vắng</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end gap-2">
+                                <button class="btn btn-primary w-100" onclick="loadAttendance()">🔍 Lọc</button>
+                                <button class="btn btn-outline-secondary w-100" onclick="clearAttendanceFilters()">Xóa</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">Bản ghi Điểm danh</div>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Sinh viên</th>
+                                    <th>Lớp</th>
+                                    <th>Ngày</th>
+                                    <th>Giờ</th>
+                                    <th>Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendance-table">
+                                <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports Section -->
+            <div id="reports" class="section">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Báo cáo Excel</h5>
+                                <p class="card-text text-muted">Xuất dữ liệu điểm danh ra file Excel</p>
+                                <button class="btn btn-success" onclick="exportExcel()">
+                                    <i class="bi bi-file-earmark-excel"></i> Xuất Excel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Báo cáo PDF</h5>
+                                <p class="card-text text-muted">Xuất dữ liệu điểm danh ra file PDF</p>
+                                <button class="btn btn-danger" onclick="exportPDF()">
+                                    <i class="bi bi-file-earmark-pdf"></i> Xuất PDF
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+        // Require authentication
+        requireAuth();
+
+        // Check if user is lecturer
+        if (!auth.hasRole('lecturer')) {
+            window.location.href = '/';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            const user = auth.getUser();
+            document.getElementById('user-name').textContent = user.name;
+            
+            await loadDashboardStats();
+            await loadClasses();
+            await loadSessions();
+            await loadAttendance();
+        });
+
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+            
+            document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
+            event.target.closest('a').classList.add('active');
+        }
+
+        async function loadDashboardStats() {
+            try {
+                const data = await auth.apiCall('/api/dashboards/lecturer');
+                document.getElementById('stat-classes').textContent = data.classrooms.length || 0;
+                document.getElementById('stat-students').textContent = data.students.total || 0;
+                document.getElementById('stat-sessions').textContent = data.sessions.total || 0;
+                document.getElementById('stat-attendance').textContent = data.attendance.today || 0;
+            } catch (error) {
+                console.error('Error loading dashboard stats:', error);
+            }
+        }
+
+        async function loadClasses() {
+            try {
+                const data = await auth.apiCall('/api/dashboards/lecturer');
+                const tbody = document.getElementById('classes-table');
+                
+                if (!data.classrooms || data.classrooms.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.classrooms.map(c => `
+                    <tr>
+                        <td>${c.name}</td>
+                        <td>${c.code}</td>
+                        <td>${c.student_count || 0}</td>
+                        <td>${c.subjects ? c.subjects.map(s => s.name).join(', ') : '—'}</td>
+                        <td><span class="badge bg-success">Hoạt động</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="viewClass(${c.id})">Xem</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Populate classroom filter
+                const select = document.getElementById('filter-classroom');
+                select.innerHTML = '<option value="">Tất cả lớp</option>' + 
+                    data.classrooms.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                
+                const select2 = document.getElementById('filter-att-classroom');
+                select2.innerHTML = '<option value="">Tất cả lớp</option>' + 
+                    data.classrooms.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            } catch (error) {
+                console.error('Error loading classes:', error);
+            }
+        }
+
+        async function loadSessions() {
+            try {
+                const classroom = document.getElementById('filter-classroom').value;
+                const date = document.getElementById('filter-date').value;
+                
+                let url = '/api/class-sessions?page=1&per_page=100';
+                if (classroom) url += `&classroom_id=${classroom}`;
+                if (date) url += `&date=${date}`;
+
+                const data = await auth.apiCall(url);
+                const tbody = document.getElementById('sessions-table');
+                
+                if (!data.sessions || data.sessions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.sessions.map(s => `
+                    <tr>
+                        <td>${s.classroom_name || '—'}</td>
+                        <td>${formatDate(s.start_time)}</td>
+                        <td>${new Date(s.start_time).toLocaleTimeString('vi-VN')}</td>
+                        <td>${new Date(s.end_time).toLocaleTimeString('vi-VN')}</td>
+                        <td><span class="badge bg-${s.status === 'completed' ? 'success' : 'warning'}">${s.status}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editSession(${s.id})">Sửa</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        }
+
+        async function loadAttendance() {
+            try {
+                const classroom = document.getElementById('filter-att-classroom').value;
+                const date = document.getElementById('filter-att-date').value;
+                const status = document.getElementById('filter-att-status').value;
+                
+                let url = '/api/attendance?page=1&per_page=100';
+                if (classroom) url += `&classroom_id=${classroom}`;
+                if (date) url += `&date=${date}`;
+                if (status) url += `&status=${status}`;
+
+                const data = await auth.apiCall(url);
+                const tbody = document.getElementById('attendance-table');
+                
+                if (!data.records || data.records.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.records.map((r, i) => `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${r.student_name || '—'}</td>
+                        <td>${r.classroom_name || '—'}</td>
+                        <td>${formatDate(r.created_at)}</td>
+                        <td>${new Date(r.created_at).toLocaleTimeString('vi-VN')}</td>
+                        <td><span class="badge bg-success">${r.status || 'Có mặt'}</span></td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading attendance:', error);
+            }
+        }
+
+        function clearSessionFilters() {
+            document.getElementById('filter-classroom').value = '';
+            document.getElementById('filter-date').value = '';
+            loadSessions();
+        }
+
+        function clearAttendanceFilters() {
+            document.getElementById('filter-att-classroom').value = '';
+            document.getElementById('filter-att-date').value = '';
+            document.getElementById('filter-att-status').value = '';
+            loadAttendance();
+        }
+
+        function showAddSessionModal() {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function viewClass(id) {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function editSession(id) {
+            alert('Tính năng này sẽ được thêm vào');
+        }
+
+        function exportExcel() {
+            window.location.href = '/api/reports/attendance/excel';
+        }
+
+        function exportPDF() {
+            window.location.href = '/api/reports/attendance/pdf';
+        }
+
+        async function logout() {
+            await auth.logout();
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>

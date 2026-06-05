@@ -1,0 +1,149 @@
+<!-- Dynamic Sidebar Component -->
+<h5>📊 {% block sidebar_title %}Admin Panel{% endblock %}</h5>
+
+<div id="sidebar-menu">
+    <!-- Menu will be populated by JavaScript -->
+    <a href="#" onclick="showSection('dashboard')" class="nav-link active">
+        <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+</div>
+
+<hr style="border-color: rgba(255, 255, 255, 0.2);">
+<a href="#" onclick="logout()" class="nav-link">
+    <i class="bi bi-box-arrow-right"></i> Đăng xuất
+</a>
+
+<script>
+    // Load sidebar menu based on user role
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const user = auth.getUser();
+            const role = user.role;
+            
+            // Load menu structure based on role
+            let menuItems = [];
+            
+            if (role === 'admin') {
+                menuItems = [
+                    { id: 'dashboard', title: 'Dashboard', icon: 'bi-speedometer2', route: '/admin-dashboard' },
+                    { id: 'master-data', title: 'Master Data', icon: 'bi-database', children: [
+                        { id: 'departments', title: 'Phòng ban', route: '/admin/departments' },
+                        { id: 'majors', title: 'Chuyên ngành', route: '/admin/majors' },
+                        { id: 'programs', title: 'Chương trình', route: '/admin/programs' },
+                        { id: 'academic-years', title: 'Năm học', route: '/admin/academic-years' },
+                        { id: 'semesters', title: 'Học kỳ', route: '/admin/semesters' },
+                        { id: 'campuses', title: 'Cơ sở', route: '/admin/campuses' },
+                        { id: 'buildings', title: 'Tòa nhà', route: '/admin/buildings' },
+                        { id: 'rooms', title: 'Phòng học', route: '/admin/rooms' }
+                    ]},
+                    { id: 'academic', title: 'Academic Structure', icon: 'bi-book', children: [
+                        { id: 'subjects', title: 'Môn học', route: '/admin/subjects' },
+                        { id: 'classrooms', title: 'Lớp học', route: '/admin/classrooms' },
+                        { id: 'schedules', title: 'Thời khóa biểu', route: '/admin/schedules' },
+                        { id: 'sessions', title: 'Buổi học', route: '/admin/sessions' }
+                    ]},
+                    { id: 'users', title: 'Users', icon: 'bi-people', children: [
+                        { id: 'lecturers', title: 'Giảng viên', route: '/admin/lecturers' },
+                        { id: 'students', title: 'Sinh viên', route: '/admin/students' }
+                    ]},
+                    { id: 'attendance', title: 'Điểm danh', icon: 'bi-clipboard-check', route: '/admin/attendance' },
+                    { id: 'face-recognition', title: 'Face Recognition', icon: 'bi-person-bounding-box', children: [
+                        { id: 'face-models', title: 'Face Models', route: '/admin/face-models' },
+                        { id: 'training', title: 'Training', route: '/admin/training' }
+                    ]},
+                    { id: 'import-export', title: 'Import/Export', icon: 'bi-upload', route: '/admin/import-export' },
+                    { id: 'reports', title: 'Reports', icon: 'bi-file-earmark-pdf', route: '/admin/reports' },
+                    { id: 'notifications', title: 'Notifications', icon: 'bi-bell', route: '/admin/notifications' },
+                    { id: 'system', title: 'System', icon: 'bi-gear', children: [
+                        { id: 'settings', title: 'Settings', route: '/admin/settings' },
+                        { id: 'logs', title: 'Logs', route: '/admin/logs' },
+                        { id: 'backup', title: 'Backup/Restore', route: '/admin/backup' }
+                    ]}
+                ];
+            } else if (role === 'lecturer') {
+                menuItems = [
+                    { id: 'dashboard', title: 'Dashboard', icon: 'bi-speedometer2', route: '/teacher-dashboard' },
+                    { id: 'teaching', title: 'Teaching', icon: 'bi-book', children: [
+                        { id: 'my-classes', title: 'My Classes', route: '/teacher/classes' },
+                        { id: 'my-subjects', title: 'My Subjects', route: '/teacher/subjects' },
+                        { id: 'schedule', title: 'Class Schedule', route: '/teacher/schedule' }
+                    ]},
+                    { id: 'sessions', title: 'Sessions', icon: 'bi-calendar-event', route: '/teacher/sessions' },
+                    { id: 'attendance', title: 'Điểm danh', icon: 'bi-clipboard-check', route: '/teacher/attendance' },
+                    { id: 'reports', title: 'Reports', icon: 'bi-file-earmark-pdf', route: '/teacher/reports' },
+                    { id: 'notifications', title: 'Notifications', icon: 'bi-bell', route: '/teacher/notifications' }
+                ];
+            } else if (role === 'student') {
+                menuItems = [
+                    { id: 'dashboard', title: 'Dashboard', icon: 'bi-speedometer2', route: '/student-dashboard' },
+                    { id: 'attendance', title: 'Attendance', icon: 'bi-clipboard-check', route: '/student/attendance' },
+                    { id: 'profile', title: 'Profile', icon: 'bi-person', route: '/student/profile' }
+                ];
+            }
+            
+            // Render menu
+            renderMenu(menuItems);
+        } catch (error) {
+            console.error('Error loading sidebar menu:', error);
+        }
+    });
+    
+    function renderMenu(items) {
+        const menuContainer = document.getElementById('sidebar-menu');
+        menuContainer.innerHTML = '';
+        
+        items.forEach(item => {
+            if (item.children) {
+                // Parent item with children
+                const parentDiv = document.createElement('div');
+                parentDiv.className = 'nav-section';
+                
+                const parentLink = document.createElement('a');
+                parentLink.href = '#';
+                parentLink.className = 'nav-link';
+                parentLink.innerHTML = `<i class="bi ${item.icon}"></i> ${item.title}`;
+                parentLink.onclick = (e) => {
+                    e.preventDefault();
+                    toggleSubmenu(item.id);
+                };
+                
+                const submenuDiv = document.createElement('div');
+                submenuDiv.id = `submenu-${item.id}`;
+                submenuDiv.style.display = 'none';
+                submenuDiv.style.paddingLeft = '20px';
+                
+                item.children.forEach(child => {
+                    const childLink = document.createElement('a');
+                    childLink.href = child.route;
+                    childLink.className = 'nav-link';
+                    childLink.style.fontSize = '14px';
+                    childLink.innerHTML = `<i class="bi bi-dot"></i> ${child.title}`;
+                    submenuDiv.appendChild(childLink);
+                });
+                
+                parentDiv.appendChild(parentLink);
+                parentDiv.appendChild(submenuDiv);
+                menuContainer.appendChild(parentDiv);
+            } else {
+                // Single item
+                const link = document.createElement('a');
+                link.href = item.route;
+                link.className = 'nav-link';
+                link.innerHTML = `<i class="bi ${item.icon}"></i> ${item.title}`;
+                menuContainer.appendChild(link);
+            }
+        });
+    }
+    
+    function toggleSubmenu(itemId) {
+        const submenu = document.getElementById(`submenu-${itemId}`);
+        if (submenu) {
+            submenu.style.display = submenu.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+    
+    async function logout() {
+        await auth.logout();
+        window.location.href = '/login';
+    }
+</script>

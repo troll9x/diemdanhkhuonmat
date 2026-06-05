@@ -1,0 +1,191 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Backup/Restore - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-cloud-arrow-down"></i> {{ page_title or 'Backup / Restore' }}</h2>
+</div>
+
+<!-- System Health Card -->
+<div class="row mb-4" id="healthRow">
+    <div class="col-md-4">
+        <div class="stat-card text-center">
+            <div class="stat-value" id="healthStatus">—</div>
+            <div class="stat-label">Trạng thái hệ thống</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card text-center">
+            <div class="stat-value text-info" id="dbSize">—</div>
+            <div class="stat-label">Kích thước Database (MB)</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card text-center">
+            <div class="stat-value text-secondary" id="totalUsers">—</div>
+            <div class="stat-label">Tổng người dùng</div>
+        </div>
+    </div>
+</div>
+
+<!-- Health Checks -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-heart-pulse"></i> Kiểm tra hệ thống</div>
+    <div class="card-body" id="healthChecks">
+        <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary"></div> Đang kiểm tra...
+        </div>
+    </div>
+</div>
+
+<!-- Backup Files -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-archive"></i> Các bản backup</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadBackupInfo()">
+            <i class="bi bi-arrow-clockwise"></i> Làm mới
+        </button>
+    </div>
+    <div class="card-body" id="backupFiles">
+        <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary"></div> Đang tải...
+        </div>
+    </div>
+</div>
+
+<!-- Cleanup Tools -->
+<div class="card">
+    <div class="card-header"><i class="bi bi-tools"></i> Công cụ dọn dẹp</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="border rounded p-3">
+                    <h6><i class="bi bi-journal-x text-warning"></i> Xóa logs cũ</h6>
+                    <p class="text-muted small mb-2">Xóa audit logs cũ hơn 90 ngày để giảm kích thước database.</p>
+                    <button class="btn btn-warning btn-sm" onclick="cleanupLogs()">
+                        <i class="bi bi-trash"></i> Dọn logs cũ (>90 ngày)
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="border rounded p-3">
+                    <h6><i class="bi bi-calendar-x text-danger"></i> Xóa buổi học cũ</h6>
+                    <p class="text-muted small mb-2">Xóa các buổi học đã kết thúc hơn 30 ngày.</p>
+                    <button class="btn btn-danger btn-sm" onclick="cleanupSessions()">
+                        <i class="bi bi-trash"></i> Dọn buổi học cũ (>30 ngày)
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="alert alert-info mt-3">
+            <i class="bi bi-info-circle"></i>
+            <strong>Ghi chú:</strong> Tính năng backup/restore tự động sẽ được thêm vào trong phiên bản tiếp theo.
+            Hiện tại vui lòng sao lưu file <code>instance/attendance.db</code> thủ công.
+        </div>
+    </div>
+</div>
+
+<!-- Alert -->
+<div id="alertContainer" class="mt-3"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSystemStats();
+        loadHealthCheck();
+        loadBackupInfo();
+    });
+
+    async function loadSystemStats() {
+        try {
+            const data = await api.get('/system/stats');
+            document.getElementById('dbSize').textContent = data.database?.size_mb ?? '—';
+            document.getElementById('totalUsers').textContent = data.users?.total ?? '—';
+        } catch(e) {
+            document.getElementById('dbSize').textContent = 'N/A';
+        }
+    }
+
+    async function loadHealthCheck() {
+        try {
+            const data = await api.get('/system/health');
+            const statusEl = document.getElementById('healthStatus');
+            statusEl.textContent = data.status === 'healthy' ? '✓ Tốt' : '⚠ Có vấn đề';
+            statusEl.className = `stat-value text-${data.status === 'healthy' ? 'success' : 'warning'}`;
+
+            const checks = data.checks || {};
+            const el = document.getElementById('healthChecks');
+            el.innerHTML = Object.entries(checks).map(([k, v]) => `
+                <div class="d-flex justify-content-between border-bottom py-2">
+                    <span><strong>${k}</strong></span>
+                    <span class="${v === 'ok' ? 'text-success' : 'text-danger'}">${v}</span>
+                </div>
+            `).join('') || '<p class="text-muted">Không có thông tin</p>';
+        } catch(e) {
+            document.getElementById('healthChecks').innerHTML =
+                `<div class="alert alert-danger">Lỗi: ${e.message}</div>`;
+        }
+    }
+
+    async function loadBackupInfo() {
+        try {
+            const data = await api.get('/system/backup-info');
+            const backups = data.backups || [];
+            const el = document.getElementById('backupFiles');
+
+            if (!backups.length) {
+                el.innerHTML = '<p class="text-muted text-center py-3">Chưa có file backup nào</p>';
+                return;
+            }
+
+            el.innerHTML = `<div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr><th>Tên file</th><th>Kích thước (MB)</th><th>Ngày tạo</th></tr>
+                    </thead>
+                    <tbody>
+                        ${backups.map(b => `
+                            <tr>
+                                <td><i class="bi bi-file-earmark-zip"></i> ${escHtml(b.name)}</td>
+                                <td>${b.size_mb}</td>
+                                <td>${b.created}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        } catch(e) {
+            document.getElementById('backupFiles').innerHTML =
+                `<p class="text-muted">Không lấy được thông tin backup: ${e.message}</p>`;
+        }
+    }
+
+    async function cleanupLogs() {
+        if (!confirm('Xóa tất cả audit logs cũ hơn 90 ngày?')) return;
+        try {
+            const data = await api.delete('/system/cleanup/old-logs?days=90');
+            showAlert(`Đã xóa ${data.deleted_count} audit logs`, 'success');
+        } catch(e) { showAlert('Lỗi: ' + e.message, 'danger'); }
+    }
+
+    async function cleanupSessions() {
+        if (!confirm('Xóa các buổi học đã kết thúc hơn 30 ngày?')) return;
+        try {
+            const data = await api.delete('/system/cleanup/inactive-sessions?days=30');
+            showAlert(`Đã xóa ${data.deleted_count} buổi học`, 'success');
+        } catch(e) { showAlert('Lỗi: ' + e.message, 'danger'); }
+    }
+
+    function showAlert(msg, type) {
+        document.getElementById('alertContainer').innerHTML =
+            `<div class="alert alert-${type} alert-dismissible fade show">
+                ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`;
+    }
+    function escHtml(t) {
+        const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML;
+    }
+</script>
+{% endblock %}

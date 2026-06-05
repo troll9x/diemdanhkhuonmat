@@ -1,0 +1,200 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Quản lý Sinh viên - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ page_title or 'Quản lý Sinh viên' }}</h1>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#studentModal" onclick="resetStudentForm()">
+        <i class="bi bi-plus"></i> Thêm mới
+    </button>
+</div>
+
+<!-- Search & Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <input type="text" id="searchInput" class="form-control" placeholder="Tìm kiếm theo tên hoặc email">
+            </div>
+            <div class="col-md-2">
+                <select id="filterDepartment" class="form-select">
+                    <option value="">Tất cả phòng ban</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select id="filterActive" class="form-select">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="true">Hoạt động</option>
+                    <option value="false">Không hoạt động</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="filterFaceRegistered" class="form-select">
+                    <option value="">Tất cả đăng ký face</option>
+                    <option value="true">Đã đăng ký</option>
+                    <option value="false">Chưa đăng ký</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-secondary w-100" onclick="loadStudents()">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" class="text-center d-none">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Đang tải...</span>
+    </div>
+    <p class="mt-2">Đang tải dữ liệu...</p>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="text-center d-none py-5">
+    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+    <p class="text-muted mt-3">Không có sinh viên nào</p>
+</div>
+
+<!-- Data Table -->
+<div id="tableContainer" class="d-none">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã</th>
+                    <th>Tên</th>
+                    <th>Email</th>
+                    <th>Điện thoại</th>
+                    <th>Phòng ban</th>
+                    <th>Face</th>
+                    <th>Trạng thái</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody id="studentsTable">
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <nav id="paginationContainer" class="mt-4 d-none">
+        <ul class="pagination justify-content-center" id="paginationList">
+        </ul>
+    </nav>
+</div>
+
+<!-- Create/Edit Modal -->
+<div class="modal fade" id="studentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Thêm mới sinh viên</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="studentForm" onsubmit="saveStudent(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="studentId">
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="stdCode" class="form-label">Mã sinh viên *</label>
+                            <input type="text" id="stdCode" class="form-control" placeholder="VD: SV001" required>
+                            <small class="form-text text-danger d-none" id="codeError"></small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="stdName" class="form-label">Tên sinh viên *</label>
+                            <input type="text" id="stdName" class="form-control" placeholder="VD: Nguyễn Văn A" required>
+                            <small class="form-text text-danger d-none" id="nameError"></small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="stdEmail" class="form-label">Email</label>
+                            <input type="email" id="stdEmail" class="form-control" placeholder="VD: sv001@example.com">
+                            <small class="form-text text-danger d-none" id="emailError"></small>
+                        </div>
+
+                        <div class="col-md-6 mb-3" id="passwordGroup">
+                            <label for="stdPassword" class="form-label">Mật khẩu <span id="passwordLabel"></span></label>
+                            <input type="password" id="stdPassword" class="form-control" placeholder="Nhập mật khẩu" required>
+                            <small class="form-text text-danger d-none" id="passwordError"></small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="stdPhone" class="form-label">Điện thoại</label>
+                            <input type="tel" id="stdPhone" class="form-control" placeholder="VD: 0901234567">
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="stdYear" class="form-label">Năm nhập học</label>
+                            <input type="number" id="stdYear" class="form-control" placeholder="VD: 2023">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="stdDepartment" class="form-label">Phòng ban</label>
+                            <select id="stdDepartment" class="form-select">
+                                <option value="">-- Chọn phòng ban --</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label for="stdMajor" class="form-label">Chuyên ngành</label>
+                            <select id="stdMajor" class="form-select">
+                                <option value="">-- Chọn chuyên ngành --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input type="checkbox" id="stdActive" class="form-check-input" checked>
+                                <label class="form-check-label" for="stdActive">
+                                    Hoạt động
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span id="submitBtnText">Lưu</span>
+                        <span id="submitBtnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Alert for notifications -->
+<div id="alertContainer"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/admin/students.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadDepartments();
+        loadStudents();
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') loadStudents();
+        });
+
+        document.getElementById('filterDepartment').addEventListener('change', loadMajors);
+    });
+</script>
+{% endblock %}

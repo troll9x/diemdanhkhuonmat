@@ -1,0 +1,156 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Điểm danh QR - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ page_title or 'Điểm danh QR' }}</h1>
+</div>
+
+<!-- Session Selection -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <label for="sessionSelect" class="form-label">Chọn buổi học</label>
+                <select id="sessionSelect" class="form-select" onchange="loadSessionDetails()">
+                    <option value="">-- Chọn buổi học --</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" class="text-center d-none">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Đang tải...</span>
+    </div>
+    <p class="mt-2">Đang tải...</p>
+</div>
+
+<!-- Session Details -->
+<div id="sessionDetails" class="d-none">
+    <div class="row">
+        <!-- QR Code -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Mã QR Điểm danh</h6>
+                </div>
+                <div class="card-body text-center">
+                    <div id="qrCode" style="padding: 20px; background: white;"></div>
+                    <button class="btn btn-primary mt-3" onclick="downloadQR()">
+                        <i class="bi bi-download"></i> Tải QR
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Session Info & Link -->
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Thông tin buổi học</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <label class="text-muted small">Lớp</label>
+                        <div id="sessClassroom" class="fw-bold">--</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="text-muted small">Môn học</label>
+                        <div id="sessSubject" class="fw-bold">--</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="text-muted small">Ngày / Giờ</label>
+                        <div id="sessTime" class="fw-bold">--</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="text-muted small">Phòng</label>
+                        <div id="sessRoom" class="fw-bold">--</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Trạng thái</label>
+                        <div id="sessStatus">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Đường dẫn điểm danh</h6>
+                </div>
+                <div class="card-body">
+                    <div class="input-group">
+                        <input type="text" id="attendanceLink" class="form-control" readonly>
+                        <button class="btn btn-outline-secondary" onclick="copyLink()" title="Sao chép">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        Sinh viên có thể dùng QR hoặc đường dẫn này để điểm danh
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Records -->
+    <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">Danh sách điểm danh</h6>
+            <button class="btn btn-sm btn-secondary" onclick="refreshAttendance()">
+                <i class="bi bi-arrow-clockwise"></i> Cập nhật
+            </button>
+        </div>
+        <div class="card-body">
+            <div id="attendanceLoading" class="text-center d-none">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+            </div>
+            <div id="attendanceTable" class="d-none">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã SV</th>
+                                <th>Tên sinh viên</th>
+                                <th>Giờ điểm danh</th>
+                                <th>Trạng thái</th>
+                                <th>Độ chính xác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceRecords">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="attendanceEmpty" class="text-center text-muted py-4 d-none">
+                <p>Chưa có sinh viên nào điểm danh</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert for notifications -->
+<div id="alertContainer"></div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    #qrCode {
+        display: inline-block;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="{{ url_for('static', filename='js/modules/admin/qr-attendance.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadSessionsList();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,205 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Dashboard Sinh viên - Smart Attendance{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Dashboard Sinh viên</h2>
+
+<!-- Profile + Stats -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <img id="user-avatar" src="https://via.placeholder.com/100" alt="Avatar"
+                     class="rounded-circle mb-3" width="100" height="100">
+                <h5 id="profile-name">—</h5>
+                <p id="profile-code" class="text-muted mb-1">—</p>
+                <p id="profile-email" class="text-muted small mb-2">—</p>
+                <span id="face-badge" class="badge bg-secondary">Chưa đăng ký khuôn mặt</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="row g-3">
+            <div class="col-6">
+                <div class="stat-card text-center">
+                    <div class="stat-value text-primary"  id="stat-total">—</div>
+                    <div class="stat-label">Tổng Buổi học</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="stat-card text-center">
+                    <div class="stat-value text-success" id="stat-present">—</div>
+                    <div class="stat-label">Có mặt</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="stat-card text-center">
+                    <div class="stat-value text-danger"  id="stat-absent">—</div>
+                    <div class="stat-label">Vắng</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="stat-card text-center">
+                    <div class="stat-value text-info"   id="stat-rate">—%</div>
+                    <div class="stat-label">Tỷ lệ Có mặt</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Attendance History -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Lịch sử Điểm danh</span>
+        <div class="d-flex gap-2">
+            <input type="date" id="filter-date" class="form-control form-control-sm" style="width:150px;">
+            <button class="btn btn-sm btn-primary" onclick="loadAttendance()"><i class="bi bi-search"></i> Lọc</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">Xóa</button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th><th>Lớp học</th><th>Môn học</th>
+                    <th>Ngày</th><th>Giờ điểm danh</th><th>Trạng thái</th>
+                </tr>
+            </thead>
+            <tbody id="attendance-table">
+                <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Enrolled Classes -->
+<div class="card">
+    <div class="card-header">Lớp học của tôi</div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr><th>Tên lớp</th><th>Mã lớp</th><th>Giảng viên</th></tr>
+            </thead>
+            <tbody id="classes-table">
+                <tr><td colspan="3" class="text-center text-muted py-4">Đang tải...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Notification banner for open sessions -->
+<div id="open-sessions-banner" class="d-none mt-3"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    requireAuth();
+    if (!auth.hasRole('student')) window.location.href = '/login';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        // Populate name in navbar from localStorage
+        const user = auth.getUser();
+        const nameEl = document.getElementById('user-name');
+        if (nameEl && user) nameEl.textContent = user.name || user.full_name || '';
+
+        await Promise.all([loadProfile(), loadStats(), loadAttendance()]);
+    });
+
+    async function loadProfile() {
+        try {
+            // GET /api/dashboards/student/profile
+            const data = await api.getStudentDashboard();
+            const s = data.student || {};
+
+            document.getElementById('profile-name').textContent  = s.full_name     || '—';
+            document.getElementById('profile-code').textContent  = s.student_code  || '—';
+            document.getElementById('profile-email').textContent = s.email         || '—';
+
+            const faceBadge = document.getElementById('face-badge');
+            if (data.face_registration && data.face_registration.registered) {
+                faceBadge.className = 'badge bg-success';
+                faceBadge.textContent = `Khuôn mặt đã đăng ký (${data.face_registration.embedding_count} mẫu)`;
+            } else {
+                faceBadge.className = 'badge bg-warning text-dark';
+                faceBadge.textContent = 'Chưa đăng ký khuôn mặt';
+            }
+
+            // Render enrolled classes
+            const classes = data.enrolled_classrooms || [];
+            const ctbody  = document.getElementById('classes-table');
+            if (!classes.length) {
+                ctbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">Chưa đăng ký lớp học nào</td></tr>';
+            } else {
+                ctbody.innerHTML = classes.map(c => `
+                    <tr>
+                        <td><strong>${esc(c.name)}</strong></td>
+                        <td><code>${esc(c.code || '')}</code></td>
+                        <td>${esc(c.lecturer || '—')}</td>
+                    </tr>
+                `).join('');
+            }
+        } catch(e) {
+            console.error('Profile error:', e);
+        }
+    }
+
+    async function loadStats() {
+        try {
+            // GET /api/dashboards/student/attendance-stats → {overall_stats: {...}}
+            const data = await api.get('/dashboards/student/attendance-stats');
+            const s = data.overall_stats || {};
+            document.getElementById('stat-total').textContent   = s.total_records ?? '—';
+            document.getElementById('stat-present').textContent = s.present       ?? '—';
+            document.getElementById('stat-absent').textContent  = s.absent        ?? '—';
+            document.getElementById('stat-rate').textContent    = (s.attendance_rate != null ? Math.round(s.attendance_rate) + '%' : '—');
+        } catch(e) {
+            console.error('Stats error:', e);
+        }
+    }
+
+    async function loadAttendance() {
+        const tbody = document.getElementById('attendance-table');
+        try {
+            const params = new URLSearchParams({ limit: 50 });
+            const d = document.getElementById('filter-date').value;
+            // attendance-history doesn't support date filter, so we filter client-side
+            const data = await api.get('/dashboards/student/attendance-history?' + params.toString());
+            let history = data.history || [];
+            if (d) history = history.filter(r => (r.session_date || '').startsWith(d));
+
+            if (!history.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                return;
+            }
+            tbody.innerHTML = history.map((r, i) => `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${esc(r.classroom)}</td>
+                    <td>${esc(r.subject)}</td>
+                    <td>${r.session_date || '—'}</td>
+                    <td>${r.check_in_time ? new Date(r.check_in_time).toLocaleTimeString('vi-VN') : '—'}</td>
+                    <td>${statusBadge(r.status)}</td>
+                </tr>
+            `).join('');
+        } catch(e) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Lỗi tải dữ liệu</td></tr>';
+            console.error(e);
+        }
+    }
+
+    function clearFilters() {
+        document.getElementById('filter-date').value = '';
+        loadAttendance();
+    }
+
+    function statusBadge(s) {
+        const m = {present:'success',late:'warning',absent:'danger',excused:'info'};
+        const l = {present:'Có mặt',late:'Muộn',absent:'Vắng',excused:'Xin phép'};
+        return `<span class="badge bg-${m[s]||'secondary'}">${l[s]||s}</span>`;
+    }
+
+    function esc(t) { const d=document.createElement('div');d.textContent=t||'';return d.innerHTML; }
+</script>
+{% endblock %}
