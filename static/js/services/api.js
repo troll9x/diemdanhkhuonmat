@@ -324,6 +324,48 @@ class APIService {
         return this.get(`/reports/attendance${query ? '?' + query : ''}`);
     }
 
+    // ============ STUDENT MODULE ENDPOINTS ============
+
+    async getStudentMe() {
+        return this.get('/student/me');
+    }
+
+    async registerFace(formData) {
+        const token = auth.getToken();
+        const response = await fetch(`${this.baseURL}/student/register-face`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `API error: ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async getActiveSessions() {
+        return this.get('/student/active-sessions');
+    }
+
+    async completeRegistration() {
+        return this.post('/student/complete-registration', {});
+    }
+
+    async studentCheckin(sessionId, formData) {
+        const token = auth.getToken();
+        const response = await fetch(`${this.baseURL}/student/sessions/${sessionId}/check-in`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `API error: ${response.status}`);
+        }
+        return response.json();
+    }
+
     // ============ TRAINING ENDPOINTS ============
 
     async getTrainingStatus() {

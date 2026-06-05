@@ -10,7 +10,8 @@ from models import (
 from utils.decorators import permission_required
 from config.permissions import (
     PERM_VIEW_CLASS_SCHEDULES,
-    PERM_MANAGE_SESSIONS
+    PERM_MANAGE_SESSIONS,
+    PERM_MANAGE_OWN_SESSIONS
 )
 
 class_sessions_bp = Blueprint('class_sessions', __name__)
@@ -188,7 +189,7 @@ def delete_class_session(session_id):
 
 @class_sessions_bp.route('/<int:session_id>/start', methods=['POST'])
 @jwt_required()
-@permission_required(PERM_MANAGE_SESSIONS)
+@permission_required(PERM_MANAGE_OWN_SESSIONS)
 def start_attendance(session_id):
     """
     Open attendance for a session.
@@ -243,7 +244,7 @@ def start_attendance(session_id):
 
 @class_sessions_bp.route('/<int:session_id>/end', methods=['POST'])
 @jwt_required()
-@permission_required(PERM_MANAGE_SESSIONS)
+@permission_required(PERM_MANAGE_OWN_SESSIONS)
 def end_attendance(session_id):
     """Close attendance — sets status → completed."""
     session = ClassSession.query.get_or_404(session_id)

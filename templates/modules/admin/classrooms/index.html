@@ -137,6 +137,53 @@
 <!-- Alert for notifications -->
 <div id="alertContainer"></div>
 
+<!-- ── Student Management Modal ───────────────────────────────────────────── -->
+<div class="modal fade" id="studentsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-people"></i> Sinh viên trong lớp:
+                    <span id="smClassName" class="text-primary"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Add students -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Thêm sinh viên vào lớp</label>
+                    <div class="input-group">
+                        <input type="text" id="smSearch" class="form-control"
+                               placeholder="Tìm theo mã hoặc tên sinh viên...">
+                        <button class="btn btn-outline-primary" onclick="smSearchStudents()">
+                            <i class="bi bi-search"></i> Tìm
+                        </button>
+                    </div>
+                    <div id="smSearchResults" class="mt-2"></div>
+                </div>
+                <hr>
+                <!-- Current students -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold">Danh sách sinh viên đã ghi danh
+                        (<span id="smCount">0</span>)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr><th>Mã SV</th><th>Họ tên</th><th>Email</th><th></th></tr>
+                        </thead>
+                        <tbody id="smStudentsTable">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Đang tải...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}

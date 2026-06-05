@@ -166,22 +166,23 @@
         await loadAttendance();
     });
 
+    let _dashboardData = null;
+
     async function loadDashboardStats() {
         try {
-            // GET /api/dashboards/lecturer/overview
-            const data = await api.getTeacherDashboard();
-            const s = data.stats || {};
-            document.getElementById('stat-classes').textContent   = s.assigned_classrooms ?? '—';
-            document.getElementById('stat-sessions').textContent  = s.today_sessions ?? '—';
-            document.getElementById('stat-attendance').textContent= s.total_attendance ?? '—';
-            document.getElementById('stat-week').textContent      = s.week_attendance ?? '—';
+            _dashboardData = await api.getTeacherDashboard();
+            const s = _dashboardData.stats || {};
+            document.getElementById('stat-classes').textContent    = s.assigned_classrooms ?? '—';
+            document.getElementById('stat-sessions').textContent   = s.today_sessions ?? '—';
+            document.getElementById('stat-attendance').textContent = s.total_attendance ?? '—';
+            document.getElementById('stat-week').textContent       = s.week_attendance ?? '—';
 
-            // Populate classroom filter from overview
+            // Populate classroom filter
             const sel = document.getElementById('filter-classroom');
-            (data.classes || []).forEach(c => {
+            (_dashboardData.classes || []).forEach(c => {
                 const o = document.createElement('option');
                 o.value = c.id;
-                o.textContent = c.class_name || c.name || c.id;
+                o.textContent = c.class_name || c.name;
                 sel.appendChild(o);
             });
         } catch (e) {
@@ -192,8 +193,7 @@
     async function loadTodaySessions() {
         const tbody = document.getElementById('sessions-table');
         try {
-            // GET /api/dashboards/lecturer/overview → today_sessions array
-            const data = await api.getTeacherDashboard();
+            const data = _dashboardData || await api.getTeacherDashboard();
             const sessions = data.today_sessions || [];
 
             if (!sessions.length) {
@@ -208,8 +208,8 @@
                     <td>${s.start_time || '—'} – ${s.end_time || '—'}</td>
                     <td>${statusBadge(s.status)}</td>
                     <td>
-                        <a href="/admin/attendance?session=${s.id}" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-qr-code"></i> QR
+                        <a href="/teacher/sessions" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-calendar-event"></i> Buổi học
                         </a>
                     </td>
                 </tr>
@@ -223,21 +223,20 @@
     async function loadClasses() {
         const tbody = document.getElementById('classes-table');
         try {
-            // GET /api/classrooms returns {items, pagination}
-            const data = await api.getClassrooms({ per_page: 100 });
-            const classes = data.items || [];
+            const data = _dashboardData || await api.getTeacherDashboard();
+            const classes = data.classes || [];
 
             if (!classes.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Không có lớp học nào</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Chưa được phân công lớp nào</td></tr>';
                 return;
             }
 
             tbody.innerHTML = classes.map(c => `
                 <tr>
-                    <td><strong>${esc(c.name)}</strong></td>
-                    <td><code>${esc(c.code)}</code></td>
-                    <td>${c.students_count ?? '—'}</td>
-                    <td>${c.subjects_count ?? '—'} môn</td>
+                    <td><strong>${esc(c.class_name || c.name)}</strong></td>
+                    <td><code>${esc(c.class_code || c.code)}</code></td>
+                    <td>${c.student_count ?? 0}</td>
+                    <td>${esc(c.subject_name || '—')}</td>
                 </tr>
             `).join('');
         } catch (e) {

@@ -7,7 +7,7 @@ from sqlalchemy import func, and_, or_
 from models import (
     db, Student, Lecturer, Administrator, ClassroomStudent,
     AttendanceRecord, ClassSession, Classroom,
-    Subject, Department, FaceEmbedding, FaceModel
+    Subject, Department, FaceEmbedding, FaceModel, ClassroomSubject
 )
 from utils.decorators import permission_required
 from config.permissions import (
@@ -298,6 +298,27 @@ def lecturer_overview():
         func.date(AttendanceRecord.attendance_time) >= start_of_week
     ).count() if session_ids else 0
     
+    # Build classes list with counts and subjects
+    classes_list = []
+    for c in assigned_classrooms:
+        student_count = ClassroomStudent.query.filter_by(classroom_id=c.id).count()
+        subj_rows = ClassroomSubject.query.filter_by(classroom_id=c.id).all()
+        subjects = [
+            {'id': r.subject.id, 'subject_name': r.subject.subject_name}
+            for r in subj_rows if r.subject and not r.subject.is_deleted
+        ]
+        classes_list.append({
+            'id': c.id,
+            'class_code': c.class_code,
+            'class_name': c.class_name,
+            'code': c.class_code,
+            'name': c.class_name,
+            'is_active': c.is_active,
+            'student_count': student_count,
+            'subjects': subjects,
+            'subject_name': subjects[0]['subject_name'] if subjects else '—',
+        })
+
     return jsonify({
         'lecturer': {
             'id': lecturer.id,
@@ -310,9 +331,11 @@ def lecturer_overview():
             'total_attendance': total_attendance,
             'week_attendance': week_attendance
         },
+        'classes': classes_list,
         'today_sessions': [{
             'id': s.id,
             'classroom': s.classroom.class_name if s.classroom else None,
+            'classroom_id': s.classroom_id,
             'subject': s.subject.subject_name if s.subject else None,
             'start_time': s.start_time.strftime('%H:%M') if s.start_time else None,
             'end_time': s.end_time.strftime('%H:%M') if s.end_time else None,

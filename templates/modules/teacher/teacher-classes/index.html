@@ -45,7 +45,7 @@
 
     async function loadClasses() {
         try {
-            const data = await api.get('/dashboards/lecturer/overview');
+            const data = await api.getTeacherDashboard();   // GET /dashboards/lecturer/overview
             const classes = data.classes || [];
 
             document.getElementById('loadingState').classList.add('d-none');

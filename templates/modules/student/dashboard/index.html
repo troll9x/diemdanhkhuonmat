@@ -5,6 +5,21 @@
 {% block content %}
 <h2 class="mb-4">Dashboard Sinh viên</h2>
 
+<!-- ── Face Registration Alert (shown when not registered) ──────────────────── -->
+<div id="faceRegAlert" class="alert alert-warning d-flex align-items-center d-none mb-4" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4 me-3 flex-shrink-0"></i>
+    <div>
+        <strong>Bạn chưa đăng ký khuôn mặt!</strong>
+        Hãy đăng ký khuôn mặt để có thể điểm danh bằng nhận diện AI.
+        <a href="/student/face-registration" class="btn btn-warning btn-sm ms-2">
+            <i class="bi bi-person-bounding-box"></i> Đăng ký ngay
+        </a>
+    </div>
+</div>
+
+<!-- ── Active Session Notifications ──────────────────────────────────────────── -->
+<div id="activeSessionsBanner" class="mb-4"></div>
+
 <!-- Profile + Stats -->
 <div class="row mb-4">
     <div class="col-md-4">
@@ -16,6 +31,12 @@
                 <p id="profile-code" class="text-muted mb-1">—</p>
                 <p id="profile-email" class="text-muted small mb-2">—</p>
                 <span id="face-badge" class="badge bg-secondary">Chưa đăng ký khuôn mặt</span>
+                <div class="mt-2">
+                    <a href="/student/face-registration" id="face-reg-btn"
+                       class="btn btn-sm btn-outline-primary d-none">
+                        <i class="bi bi-person-bounding-box"></i> Đăng ký khuôn mặt
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -88,9 +109,6 @@
         </table>
     </div>
 </div>
-
-<!-- Notification banner for open sessions -->
-<div id="open-sessions-banner" class="d-none mt-3"></div>
 {% endblock %}
 
 {% block extra_js %}
@@ -98,18 +116,21 @@
     requireAuth();
     if (!auth.hasRole('student')) window.location.href = '/login';
 
+    let sessionPollTimer = null;
+
     document.addEventListener('DOMContentLoaded', async () => {
-        // Populate name in navbar from localStorage
         const user = auth.getUser();
         const nameEl = document.getElementById('user-name');
         if (nameEl && user) nameEl.textContent = user.name || user.full_name || '';
 
         await Promise.all([loadProfile(), loadStats(), loadAttendance()]);
+        startSessionPolling();
     });
+
+    // ── Profile ────────────────────────────────────────────────────────────────
 
     async function loadProfile() {
         try {
-            // GET /api/dashboards/student/profile
             const data = await api.getStudentDashboard();
             const s = data.student || {};
 
@@ -118,15 +139,19 @@
             document.getElementById('profile-email').textContent = s.email         || '—';
 
             const faceBadge = document.getElementById('face-badge');
+            const faceRegBtn = document.getElementById('face-reg-btn');
+            const faceRegAlert = document.getElementById('faceRegAlert');
+
             if (data.face_registration && data.face_registration.registered) {
                 faceBadge.className = 'badge bg-success';
                 faceBadge.textContent = `Khuôn mặt đã đăng ký (${data.face_registration.embedding_count} mẫu)`;
+                faceRegBtn.classList.add('d-none');
             } else {
-                faceBadge.className = 'badge bg-warning text-dark';
-                faceBadge.textContent = 'Chưa đăng ký khuôn mặt';
+                // Bắt buộc đăng ký khuôn mặt trước khi vào dashboard
+                window.location.href = '/student/face-registration';
+                return;
             }
 
-            // Render enrolled classes
             const classes = data.enrolled_classrooms || [];
             const ctbody  = document.getElementById('classes-table');
             if (!classes.length) {
@@ -145,26 +170,28 @@
         }
     }
 
+    // ── Stats ──────────────────────────────────────────────────────────────────
+
     async function loadStats() {
         try {
-            // GET /api/dashboards/student/attendance-stats → {overall_stats: {...}}
             const data = await api.get('/dashboards/student/attendance-stats');
             const s = data.overall_stats || {};
             document.getElementById('stat-total').textContent   = s.total_records ?? '—';
-            document.getElementById('stat-present').textContent = s.present       ?? '—';
-            document.getElementById('stat-absent').textContent  = s.absent        ?? '—';
+            document.getElementById('stat-present').textContent = s.present        ?? '—';
+            document.getElementById('stat-absent').textContent  = s.absent         ?? '—';
             document.getElementById('stat-rate').textContent    = (s.attendance_rate != null ? Math.round(s.attendance_rate) + '%' : '—');
         } catch(e) {
             console.error('Stats error:', e);
         }
     }
 
+    // ── Attendance History ─────────────────────────────────────────────────────
+
     async function loadAttendance() {
         const tbody = document.getElementById('attendance-table');
         try {
             const params = new URLSearchParams({ limit: 50 });
             const d = document.getElementById('filter-date').value;
-            // attendance-history doesn't support date filter, so we filter client-side
             const data = await api.get('/dashboards/student/attendance-history?' + params.toString());
             let history = data.history || [];
             if (d) history = history.filter(r => (r.session_date || '').startsWith(d));
@@ -193,6 +220,60 @@
         document.getElementById('filter-date').value = '';
         loadAttendance();
     }
+
+    // ── Active Session Polling ─────────────────────────────────────────────────
+
+    function startSessionPolling() {
+        pollActiveSessions(); // immediate
+        sessionPollTimer = setInterval(pollActiveSessions, 7000);
+    }
+
+    async function pollActiveSessions() {
+        try {
+            const data = await api.getActiveSessions();
+            renderActiveSessionsBanner(data.sessions || []);
+        } catch(e) {
+            console.error('Session poll error:', e);
+        }
+    }
+
+    function renderActiveSessionsBanner(sessions) {
+        const container = document.getElementById('activeSessionsBanner');
+        if (!sessions.length) {
+            container.innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = sessions.map(s => {
+            if (s.already_attended) {
+                return `
+                    <div class="alert alert-success d-flex align-items-center mb-2">
+                        <i class="bi bi-check-circle-fill fs-5 me-3 flex-shrink-0"></i>
+                        <div>
+                            <strong>Đã điểm danh:</strong>
+                            ${esc(s.subject)} – Lớp ${esc(s.classroom)}
+                            (${s.session_date} ${s.start_time || ''})
+                        </div>
+                    </div>`;
+            }
+            return `
+                <div class="alert alert-primary d-flex align-items-center justify-content-between mb-2" role="alert">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-broadcast fs-5 me-3 flex-shrink-0 text-primary"></i>
+                        <div>
+                            <strong>Điểm danh đang mở!</strong>
+                            ${esc(s.subject)} – Lớp ${esc(s.classroom)}
+                            <span class="text-muted small ms-1">(${s.session_date} ${s.start_time || ''})</span>
+                        </div>
+                    </div>
+                    <a href="/student/checkin/${s.id}" class="btn btn-primary btn-sm ms-3 flex-shrink-0">
+                        <i class="bi bi-camera-fill"></i> Vào điểm danh
+                    </a>
+                </div>`;
+        }).join('');
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
 
     function statusBadge(s) {
         const m = {present:'success',late:'warning',absent:'danger',excused:'info'};

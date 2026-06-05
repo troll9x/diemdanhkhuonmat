@@ -47,6 +47,7 @@ from routes.reports import reports_bp
 from routes.notifications import notifications_bp
 from routes.system import system_bp
 from routes.checkin import checkin_bp
+from routes.student import student_api_bp
 
 
 def create_app(config_class=Config):
@@ -112,6 +113,9 @@ def create_app(config_class=Config):
 
     # Public check-in endpoint (no JWT required)
     app.register_blueprint(checkin_bp)
+
+    # Student module API
+    app.register_blueprint(student_api_bp, url_prefix='/api/student')
     
     # ============ SEED DEFAULT ACADEMIC YEAR & SEMESTER ============
     def seed_default_academic_data():
@@ -365,6 +369,47 @@ def create_app(config_class=Config):
         print("[LECTURER-DASHBOARD] Access granted, rendering template")
         return render_template('modules/teacher/dashboard/index.html', show_sidebar=True, show_navbar=True)
     
+    # ============ STUDENT MODULE ROUTES ============
+
+    def student_page_required(fn):
+        """Require a valid student access token stored in cookies."""
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            token = request.cookies.get('access_token')
+            if not token:
+                return redirect('/login')
+            try:
+                claims = decode_token(token)
+                if claims.get('role') != 'student':
+                    return redirect('/login')
+            except Exception:
+                return redirect('/login')
+            return fn(*args, **kwargs)
+        return wrapper
+
+    @app.route('/student/face-registration')
+    @student_page_required
+    def student_face_registration():
+        """Student face registration page."""
+        return render_template(
+            'modules/student/face-registration/index.html',
+            show_sidebar=True,
+            show_navbar=True,
+            page_title='Đăng ký khuôn mặt'
+        )
+
+    @app.route('/student/checkin/<int:session_id>')
+    @student_page_required
+    def student_checkin_page(session_id):
+        """Student authenticated face check-in page."""
+        return render_template(
+            'modules/student/checkin/index.html',
+            show_sidebar=True,
+            show_navbar=True,
+            session_id=session_id,
+            page_title='Điểm danh'
+        )
+
     @app.route('/student-dashboard')
     def student_dashboard():
         """Student dashboard page - student only."""

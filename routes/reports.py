@@ -13,7 +13,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
 from models import (
-    db, AttendanceRecord, ClassSession, ClassSchedule, Student, 
+    db, AttendanceRecord, ClassSession, Student,
     Lecturer, Classroom, Subject, Administrator, AuditLog
 )
 from utils.decorators import admin_or_lecturer_required, permission_required
@@ -176,11 +176,11 @@ def export_attendance_excel():
                 query = query.filter(AttendanceRecord.session_id.in_(session_ids))
         
         if lecturer_id:
-            sessions = ClassSession.query.join(ClassSchedule).filter(
-                ClassSchedule.lecturer_id == lecturer_id
-            )
-            session_ids = [s.id for s in sessions.all()]
-            query = query.filter(AttendanceRecord.session_id.in_(session_ids))
+            lec_classrooms = Classroom.query.filter_by(lecturer_id=lecturer_id).all()
+            lec_cls_ids = [c.id for c in lec_classrooms]
+            lec_sessions = ClassSession.query.filter(ClassSession.classroom_id.in_(lec_cls_ids))
+            lec_session_ids = [s.id for s in lec_sessions.all()]
+            query = query.filter(AttendanceRecord.session_id.in_(lec_session_ids))
         
         attendances = query.all()
         
@@ -209,17 +209,16 @@ def export_attendance_excel():
                 session = ClassSession.query.get(att.session_id)
                 student = Student.query.get(att.student_id)
                 classroom = Classroom.query.get(session.classroom_id) if session else None
-                subject = Subject.query.get(classroom.subject_id) if classroom else None
-                
+                subject = Subject.query.get(session.subject_id) if session else None
+
                 detailed_data.append({
                     'Student Code': student.student_code if student else 'N/A',
                     'Student Name': student.full_name if student else 'N/A',
-                    'Subject': subject.name if subject else 'N/A',
-                    'Classroom': classroom.name if classroom else 'N/A',
+                    'Subject': subject.subject_name if subject else 'N/A',
+                    'Classroom': classroom.class_name if classroom else 'N/A',
                     'Session Date': session.session_date.strftime('%Y-%m-%d') if session else 'N/A',
                     'Check-in Time': att.attendance_time.strftime('%H:%M:%S') if att.attendance_time else 'N/A',
                     'Status': att.status.capitalize(),
-                    'Notes': att.notes or '',
                 })
             
             pd.DataFrame(detailed_data).to_excel(writer, sheet_name='Detailed', index=False)
@@ -554,7 +553,7 @@ def export_attendance_csv():
                         key = classroom.id
                         if key not in classroom_data:
                             classroom_data[key] = {
-                                'name': classroom.name,
+                                'name': classroom.class_name,
                                 'total': 0, 'present': 0, 'late': 0, 'absent': 0, 'excused': 0
                             }
                         classroom_data[key]['total'] += 1
@@ -572,22 +571,21 @@ def export_attendance_csv():
         else:
             # Detailed export
             writer.writerow(['=== DETAILED ATTENDANCE ==='])
-            writer.writerow(['Student Code', 'Student Name', 'Classroom', 'Subject', 'Date', 'Check-in Time', 'Status', 'Notes'])
+            writer.writerow(['Student Code', 'Student Name', 'Classroom', 'Subject', 'Date', 'Check-in Time', 'Status'])
             for att in attendances:
                 session = ClassSession.query.get(att.session_id)
                 student = Student.query.get(att.student_id)
                 classroom = Classroom.query.get(session.classroom_id) if session else None
-                subject = Subject.query.get(classroom.subject_id) if classroom else None
-                
+                subject = Subject.query.get(session.subject_id) if session else None
+
                 writer.writerow([
                     student.student_code if student else 'N/A',
                     student.full_name if student else 'N/A',
-                    classroom.name if classroom else 'N/A',
-                    subject.name if subject else 'N/A',
+                    classroom.class_name if classroom else 'N/A',
+                    subject.subject_name if subject else 'N/A',
                     session.session_date.strftime('%Y-%m-%d') if session else 'N/A',
                     att.attendance_time.strftime('%H:%M:%S') if att.attendance_time else 'N/A',
                     att.status,
-                    att.notes or ''
                 ])
         
         output.seek(0)
@@ -715,16 +713,15 @@ def get_student_attendance_report(student_id):
         for att in attendances:
             session = ClassSession.query.get(att.session_id)
             classroom = Classroom.query.get(session.classroom_id) if session else None
-            subject = Subject.query.get(classroom.subject_id) if classroom else None
-            
+            subject = Subject.query.get(session.subject_id) if session else None
+
             records.append({
                 'id': att.id,
                 'session_date': session.session_date.strftime('%Y-%m-%d') if session else None,
-                'classroom': classroom.name if classroom else None,
-                'subject': subject.name if subject else None,
+                'classroom': classroom.class_name if classroom else None,
+                'subject': subject.subject_name if subject else None,
                 'attendance_time': att.attendance_time.strftime('%H:%M:%S') if att.attendance_time else None,
                 'status': att.status,
-                'notes': att.notes
             })
         
         return jsonify({

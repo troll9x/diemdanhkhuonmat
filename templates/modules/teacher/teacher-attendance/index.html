@@ -108,9 +108,9 @@
         document.getElementById('filterStart').value = monthAgo;
         document.getElementById('filterEnd').value = today;
 
-        // Load classrooms for filter
+        // Load lecturer's own classrooms for filter
         try {
-            const data = await api.get('/dashboards/lecturer/overview');
+            const data = await api.getTeacherDashboard();   // GET /dashboards/lecturer/overview
             const sel = document.getElementById('filterClassroom');
             (data.classes || []).forEach(c => {
                 sel.innerHTML += `<option value="${c.id}">${escHtml(c.class_name || c.name)}</option>`;

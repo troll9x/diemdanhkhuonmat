@@ -99,8 +99,8 @@ async function loadSchedules() {
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        const data = Array.isArray(response.json) ? response.json : await response.json();
-        let schedules = Array.isArray(data) ? data : data.items || [];
+        const data = await response.json();
+        let schedules = Array.isArray(data) ? data : (data.items || []);
 
         if (isActive !== '') {
             const filterActive = isActive === 'true';

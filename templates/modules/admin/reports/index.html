@@ -52,7 +52,7 @@
 </div>
 
 <!-- Summary Cards -->
-<div class="row mb-4" id="summaryCards" style="display:none!important;">
+<div class="row mb-4 d-none" id="summaryCards">
     <div class="col-md-2">
         <div class="stat-card text-center">
             <div class="stat-value text-primary" id="sumTotal">—</div>
@@ -162,11 +162,11 @@
                 api.get('/subjects?per_page=500')
             ]);
             const clSel = document.getElementById('filterClassroom');
-            (cls.classrooms || []).forEach(c => {
+            (cls.items || []).forEach(c => {
                 clSel.innerHTML += `<option value="${c.id}">${c.class_name || c.name}</option>`;
             });
             const subSel = document.getElementById('filterSubject');
-            (subj.subjects || []).forEach(s => {
+            (subj.items || []).forEach(s => {
                 subSel.innerHTML += `<option value="${s.id}">${s.subject_name || s.name}</option>`;
             });
         } catch(e) { console.error('Dropdown load error', e); }
@@ -197,7 +197,7 @@
             document.getElementById('sumLate').textContent = s.late ?? 0;
             document.getElementById('sumAbsent').textContent = s.absent ?? 0;
             document.getElementById('sumRate').textContent = (s.rate ?? 0) + '%';
-            document.getElementById('summaryCards').style.display = '';
+            document.getElementById('summaryCards').classList.remove('d-none');
 
             // Records
             const records = data.records || [];

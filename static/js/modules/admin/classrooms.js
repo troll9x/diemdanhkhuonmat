@@ -108,6 +108,11 @@ function renderClassroomsTable(classrooms) {
             </td>
             <td>
                 <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-info"
+                            onclick="openStudentsPanel(${cls.id}, '${cls.name.replace(/'/g,'&#39;')}')"
+                            title="Quản lý sinh viên">
+                        <i class="bi bi-people"></i>
+                    </button>
                     <button class="btn btn-outline-warning" onclick="editClassroom(${cls.id})" title="Sửa">
                         <i class="bi bi-pencil"></i>
                     </button>
@@ -357,4 +362,124 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ── Student Management Panel ──────────────────────────────────────────────────
+
+let _smClassroomId = null;
+
+async function openStudentsPanel(classroomId, className) {
+    _smClassroomId = classroomId;
+    document.getElementById('smClassName').textContent = className;
+    document.getElementById('smSearch').value = '';
+    document.getElementById('smSearchResults').innerHTML = '';
+    const modal = new bootstrap.Modal(document.getElementById('studentsModal'));
+    modal.show();
+    await loadEnrolledStudents();
+}
+
+async function loadEnrolledStudents() {
+    const tbody = document.getElementById('smStudentsTable');
+    try {
+        const res = await fetch(`/api/classrooms/${_smClassroomId}/students`, {
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        const data = await res.json();
+        const students = data.students || [];
+        document.getElementById('smCount').textContent = students.length;
+
+        if (!students.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Chưa có sinh viên</td></tr>';
+            return;
+        }
+        tbody.innerHTML = students.map(s => `
+            <tr>
+                <td><code>${escapeHtml(s.student_code)}</code></td>
+                <td>${escapeHtml(s.full_name)}</td>
+                <td><small>${escapeHtml(s.email || '—')}</small></td>
+                <td>
+                    <button class="btn btn-danger btn-sm"
+                            onclick="removeStudentFromClass(${s.id})"
+                            title="Xóa khỏi lớp">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-danger text-center py-2">Lỗi: ${e.message}</td></tr>`;
+    }
+}
+
+async function smSearchStudents() {
+    const q = document.getElementById('smSearch').value.trim();
+    if (!q) return;
+    const container = document.getElementById('smSearchResults');
+    try {
+        const res = await fetch(`/api/students?search=${encodeURIComponent(q)}&per_page=10&is_active=true`, {
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        const data = await res.json();
+        const students = data.items || [];
+        if (!students.length) {
+            container.innerHTML = '<div class="text-muted small">Không tìm thấy sinh viên</div>';
+            return;
+        }
+        container.innerHTML = `
+            <div class="list-group">
+                ${students.map(s => `
+                    <button type="button"
+                            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                            onclick="addStudentToClass(${s.id})">
+                        <span>
+                            <code>${escapeHtml(s.student_code)}</code>
+                            ${escapeHtml(s.full_name)}
+                            <small class="text-muted ms-2">${escapeHtml(s.email || '')}</small>
+                        </span>
+                        <i class="bi bi-plus-circle text-success"></i>
+                    </button>
+                `).join('')}
+            </div>`;
+    } catch (e) {
+        container.innerHTML = `<div class="text-danger small">Lỗi: ${e.message}</div>`;
+    }
+}
+
+async function addStudentToClass(studentId) {
+    try {
+        const res = await fetch(`/api/classrooms/${_smClassroomId}/students`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${auth.getToken()}`
+            },
+            body: JSON.stringify({ student_ids: [studentId] })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lỗi thêm sinh viên');
+        showAlert(data.message || 'Đã thêm sinh viên', 'success');
+        document.getElementById('smSearchResults').innerHTML = '';
+        document.getElementById('smSearch').value = '';
+        await loadEnrolledStudents();
+        await loadClassrooms(currentPage);  // refresh counts
+    } catch (e) {
+        showAlert('Lỗi: ' + e.message, 'danger');
+    }
+}
+
+async function removeStudentFromClass(studentId) {
+    if (!confirm('Xóa sinh viên khỏi lớp này?')) return;
+    try {
+        const res = await fetch(`/api/classrooms/${_smClassroomId}/students/${studentId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lỗi xóa sinh viên');
+        showAlert('Đã xóa sinh viên khỏi lớp', 'success');
+        await loadEnrolledStudents();
+        await loadClassrooms(currentPage);
+    } catch (e) {
+        showAlert('Lỗi: ' + e.message, 'danger');
+    }
 }

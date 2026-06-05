@@ -242,7 +242,7 @@ def delete_student(id):
     if not student:
         return jsonify({'error': 'Student not found'}), 404
     
-    attendance_count = student.attendance_records.filter_by(is_deleted=False).count()
+    attendance_count = student.attendance_records.count()
     if attendance_count > 0:
         return jsonify({'error': 'Cannot delete student with attendance records'}), 409
     
@@ -285,12 +285,34 @@ def register_student_face(id):
 @students_bp.route('/<int:id>/unregister-face', methods=['POST'])
 @admin_only
 def unregister_student_face(id):
-    """Mark student face as unregistered."""
+    """Mark student face as unregistered (flag only)."""
     student = Student.query.filter_by(id=id, is_deleted=False).first()
     if not student:
         return jsonify({'error': 'Student not found'}), 404
-    
+
     student.face_registered = False
     db.session.commit()
-    
+
     return jsonify({'message': 'Student face unregistered', 'face_registered': False}), 200
+
+
+@students_bp.route('/<int:id>/face-data', methods=['DELETE'])
+@admin_only
+def reset_student_face_data(id):
+    """Delete ALL face embeddings for a student and reset face_registered flag.
+    Used by admin when student needs to re-register their face from scratch.
+    """
+    from models import FaceEmbedding
+    student = Student.query.filter_by(id=id, is_deleted=False).first()
+    if not student:
+        return jsonify({'error': 'Student not found'}), 404
+
+    deleted = FaceEmbedding.query.filter_by(student_id=id).delete()
+    student.face_registered = False
+    db.session.commit()
+
+    return jsonify({
+        'message': f'Đã xóa {deleted} mẫu khuôn mặt. Sinh viên cần đăng ký lại.',
+        'face_registered': False,
+        'embeddings_deleted': deleted
+    }), 200

@@ -144,6 +144,13 @@ function renderStudentsTable(students) {
                     <button class="btn btn-outline-warning" onclick="editStudent(${std.id})" title="Sửa">
                         <i class="bi bi-pencil"></i>
                     </button>
+                    ${std.face_registered
+                        ? `<button class="btn btn-outline-secondary"
+                                   onclick="resetFaceData(${std.id})"
+                                   title="Reset khuôn mặt">
+                               <i class="bi bi-person-x"></i>
+                           </button>`
+                        : ''}
                     <button class="btn btn-outline-danger" onclick="deleteStudent(${std.id})" title="Xóa">
                         <i class="bi bi-trash"></i>
                     </button>
@@ -434,4 +441,20 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+async function resetFaceData(id) {
+    if (!confirm('Xóa toàn bộ dữ liệu khuôn mặt của sinh viên này?\nSinh viên sẽ phải đăng ký lại khuôn mặt lần sau khi đăng nhập.')) return;
+    try {
+        const res = await fetch(`/api/students/${id}/face-data`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lỗi reset khuôn mặt');
+        showAlert(data.message, 'success');
+        await loadStudents(currentPage);
+    } catch (e) {
+        showAlert('Lỗi: ' + e.message, 'danger');
+    }
 }
