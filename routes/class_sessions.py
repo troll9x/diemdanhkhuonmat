@@ -1,6 +1,6 @@
 """Class session management routes."""
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime, date, timedelta
 
 from models import (
@@ -16,29 +16,109 @@ from config.permissions import (
 
 class_sessions_bp = Blueprint('class_sessions', __name__)
 
+
+def _session_dict(session):
+    return {
+        "id": session.id,
+        "session_date": session.session_date.isoformat(),
+        "start_time": session.start_time.isoformat(),
+        "end_time": session.end_time.isoformat(),
+        "status": session.status,
+        "notes": session.notes,
+        "classroom_id": session.classroom_id,
+        "classroom_name": session.classroom.class_name if session.classroom else None,
+        "lecturer_id": session.classroom.lecturer_id if session.classroom else None,
+        "lecturer_name": session.classroom.lecturer.full_name if session.classroom and session.classroom.lecturer else None,
+        "subject_id": session.subject_id,
+        "subject_name": session.subject.subject_name if session.subject else None,
+        "room_id": session.room_id,
+        "room_name": session.room.name if session.room else None,
+    }
+
+
+def _parse_time(value, field):
+    try:
+        return datetime.strptime(value, '%H:%M').time() if len(value) == 5 else datetime.strptime(value, '%H:%M:%S').time()
+    except Exception:
+        raise ValueError(f"Invalid {field} format. Use HH:MM or HH:MM:SS")
+
+
+@class_sessions_bp.route('', methods=['GET'])
 @class_sessions_bp.route('/', methods=['GET'])
 @jwt_required()
 @permission_required(PERM_VIEW_CLASS_SCHEDULES) # Using schedule view perm for sessions too
 def get_class_sessions():
     """Retrieve all class sessions."""
-    sessions = ClassSession.query.all()
-    result = []
-    for s in sessions:
-        result.append({
-            "id": s.id,
-            "session_date": s.session_date.isoformat(),
-            "start_time": s.start_time.isoformat(),
-            "end_time": s.end_time.isoformat(),
-            "status": s.status,
-            "notes": s.notes,
-            "classroom_id": s.classroom_id,
-            "classroom_name": s.classroom.class_name if s.classroom else None,
-            "subject_id": s.subject_id,
-            "subject_name": s.subject.subject_name if s.subject else None,
-            "room_id": s.room_id,
-            "room_name": s.room.name if s.room else None,
-        })
-    return jsonify(result), 200
+    query = ClassSession.query
+
+    classroom_id = request.args.get('classroom_id', type=int)
+    subject_id = request.args.get('subject_id', type=int)
+    lecturer_id = request.args.get('lecturer_id', type=int)
+    status = request.args.get('status')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+
+    if classroom_id:
+        query = query.filter(ClassSession.classroom_id == classroom_id)
+    if subject_id:
+        query = query.filter(ClassSession.subject_id == subject_id)
+    if lecturer_id:
+        query = query.join(Classroom, ClassSession.classroom_id == Classroom.id).filter(Classroom.lecturer_id == lecturer_id)
+    if status:
+        query = query.filter(ClassSession.status == status)
+    if date_from:
+        query = query.filter(ClassSession.session_date >= date.fromisoformat(date_from))
+    if date_to:
+        query = query.filter(ClassSession.session_date <= date.fromisoformat(date_to))
+
+    sessions = query.order_by(ClassSession.session_date.asc(), ClassSession.start_time.asc()).all()
+    return jsonify([_session_dict(s) for s in sessions]), 200
+
+
+@class_sessions_bp.route('', methods=['POST'])
+@class_sessions_bp.route('/', methods=['POST'])
+@jwt_required()
+@permission_required(PERM_MANAGE_SESSIONS)
+def create_class_session():
+    """Create one concrete class session."""
+    data = request.get_json() or {}
+    required = ['session_date', 'classroom_id', 'subject_id', 'start_time', 'end_time']
+    missing = [field for field in required if not data.get(field)]
+    if missing:
+        return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
+
+    classroom = Classroom.query.get(data['classroom_id'])
+    if not classroom:
+        return jsonify({'error': 'Classroom not found'}), 404
+    if not Subject.query.get(data['subject_id']):
+        return jsonify({'error': 'Subject not found'}), 404
+    room_id = data.get('room_id')
+    if room_id and not Room.query.get(room_id):
+        return jsonify({'error': 'Room not found'}), 404
+
+    try:
+        session_date = date.fromisoformat(data['session_date'])
+        start_time = _parse_time(data['start_time'], 'start_time')
+        end_time = _parse_time(data['end_time'], 'end_time')
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    if start_time >= end_time:
+        return jsonify({'error': 'start_time must be before end_time'}), 400
+
+    session = ClassSession(
+        session_date=session_date,
+        start_time=start_time,
+        end_time=end_time,
+        classroom_id=classroom.id,
+        subject_id=data['subject_id'],
+        room_id=room_id,
+        status=data.get('status', 'scheduled'),
+        notes=data.get('notes')
+    )
+    db.session.add(session)
+    db.session.commit()
+    return jsonify({'message': 'Class session created successfully', 'session': _session_dict(session)}), 201
 
 @class_sessions_bp.route('/today', methods=['GET'])
 @jwt_required()
@@ -132,20 +212,7 @@ def generate_sessions():
 def get_class_session(session_id):
     """Get a single class session by ID. Public endpoint for check-in page."""
     session = ClassSession.query.get_or_404(session_id)
-    return jsonify({
-        "id": session.id,
-        "session_date": session.session_date.isoformat(),
-        "start_time": session.start_time.isoformat(),
-        "end_time": session.end_time.isoformat(),
-        "status": session.status,
-        "notes": session.notes,
-        "classroom_id": session.classroom_id,
-        "classroom_name": session.classroom.class_name if session.classroom else None,
-        "subject_id": session.subject_id,
-        "subject_name": session.subject.subject_name if session.subject else None,
-        "room_id": session.room_id,
-        "room_name": session.room.name if session.room else None,
-    }), 200
+    return jsonify(_session_dict(session)), 200
 
 
 @class_sessions_bp.route('/<int:session_id>', methods=['PUT'])
@@ -164,6 +231,36 @@ def update_class_session(session_id):
     
     if 'notes' in data:
         session.notes = data['notes']
+
+    if 'session_date' in data:
+        try:
+            session.session_date = date.fromisoformat(data['session_date'])
+        except ValueError:
+            return jsonify({"error": "Invalid session_date format. Use YYYY-MM-DD"}), 400
+
+    if 'start_time' in data:
+        try:
+            session.start_time = _parse_time(data['start_time'], 'start_time')
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    if 'end_time' in data:
+        try:
+            session.end_time = _parse_time(data['end_time'], 'end_time')
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    if 'classroom_id' in data:
+        classroom_id = data['classroom_id']
+        if not Classroom.query.get(classroom_id):
+            return jsonify({"error": "Classroom not found"}), 404
+        session.classroom_id = classroom_id
+
+    if 'subject_id' in data:
+        subject_id = data['subject_id']
+        if not Subject.query.get(subject_id):
+            return jsonify({"error": "Subject not found"}), 404
+        session.subject_id = subject_id
     
     if 'room_id' in data:
         room_id = data['room_id']
@@ -171,8 +268,11 @@ def update_class_session(session_id):
             return jsonify({"error": "Room not found"}), 404
         session.room_id = room_id
 
+    if session.start_time >= session.end_time:
+        return jsonify({"error": "start_time must be before end_time"}), 400
+
     db.session.commit()
-    return jsonify({"message": "Class session updated successfully"}), 200
+    return jsonify({"message": "Class session updated successfully", "session": _session_dict(session)}), 200
 
 @class_sessions_bp.route('/<int:session_id>', methods=['DELETE'])
 @jwt_required()
@@ -198,6 +298,13 @@ def start_attendance(session_id):
     - Returns the QR check-in URL
     """
     session = ClassSession.query.get_or_404(session_id)
+
+    # Lecturers may only start attendance for their own classes
+    role = get_jwt().get('role')
+    if role == 'lecturer':
+        classroom = Classroom.query.get(session.classroom_id)
+        if not classroom or classroom.lecturer_id != int(get_jwt_identity()):
+            return jsonify({'error': 'Bạn không có quyền mở điểm danh lớp này'}), 403
 
     if session.status == 'completed':
         return jsonify({'error': 'Session already completed'}), 400
@@ -248,6 +355,14 @@ def start_attendance(session_id):
 def end_attendance(session_id):
     """Close attendance — sets status → completed."""
     session = ClassSession.query.get_or_404(session_id)
+
+    # Lecturers may only end attendance for their own classes
+    role = get_jwt().get('role')
+    if role == 'lecturer':
+        classroom = Classroom.query.get(session.classroom_id)
+        if not classroom or classroom.lecturer_id != int(get_jwt_identity()):
+            return jsonify({'error': 'Bạn không có quyền đóng điểm danh lớp này'}), 403
+
     if session.status not in ('scheduled', 'ongoing'):
         return jsonify({'error': f'Cannot end session with status: {session.status}'}), 400
 

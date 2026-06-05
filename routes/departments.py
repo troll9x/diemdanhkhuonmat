@@ -1,6 +1,6 @@
 """Department management routes."""
 from flask import Blueprint, jsonify, request
-from models import db, Department
+from models import db, Department, Lecturer, Student, Subject
 from utils.decorators import jwt_required, admin_only
 from utils.pagination import paginate
 from middleware.rate_limit import limiter
@@ -15,13 +15,17 @@ def list_departments():
     """List all departments with pagination and search."""
     # Search filter
     search = request.args.get('search', '').strip()
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
     
     # Build query
     query = Department.query.filter_by(is_deleted=False)
     
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+    
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     
     if search:
         query = query.filter(
@@ -75,9 +79,9 @@ def get_department(id):
         'created_at': dept.created_at.isoformat(),
         'updated_at': dept.updated_at.isoformat(),
         'stats': {
-            'lecturers_count': dept.lecturers.filter_by(is_deleted=False).count(),
-            'students_count': dept.students.filter_by(is_deleted=False).count(),
-            'subjects_count': dept.subjects.filter_by(is_deleted=False).count()
+            'lecturers_count': Lecturer.query.filter_by(department_id=id, is_deleted=False).count(),
+            'students_count':  Student.query.filter_by(department_id=id,  is_deleted=False).count(),
+            'subjects_count':  Subject.query.filter_by(department_id=id,  is_deleted=False).count(),
         }
     }), 200
 
@@ -187,9 +191,9 @@ def delete_department(id):
         return jsonify({'error': 'Department not found'}), 404
     
     # Check if department has associated records
-    lecturers_count = dept.lecturers.filter_by(is_deleted=False).count()
-    students_count = dept.students.filter_by(is_deleted=False).count()
-    subjects_count = dept.subjects.filter_by(is_deleted=False).count()
+    lecturers_count = Lecturer.query.filter_by(department_id=id, is_deleted=False).count()
+    students_count  = Student.query.filter_by(department_id=id,  is_deleted=False).count()
+    subjects_count  = Subject.query.filter_by(department_id=id,  is_deleted=False).count()
     
     if lecturers_count > 0 or students_count > 0 or subjects_count > 0:
         return jsonify({

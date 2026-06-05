@@ -22,6 +22,7 @@ def _cls_dict(cls, include_lists=False):
         'code': cls.class_code,
         'name': cls.class_name,
         'is_active': cls.is_active,
+        'lecturer_id': cls.lecturer_id,
         'lecturer': {
             'id': cls.lecturer.id,
             'full_name': cls.lecturer.full_name,
@@ -59,12 +60,16 @@ def list_classrooms():
     """List all classrooms with pagination and filters."""
     search = request.args.get('search', '').strip()
     lecturer_id = request.args.get('lecturer_id', type=int)
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
 
     query = Classroom.query.filter_by(is_deleted=False)
 
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     if lecturer_id:
         query = query.filter_by(lecturer_id=lecturer_id)
     if search:

@@ -1,84 +1,97 @@
-// Class Sessions Module
+// Admin Class Sessions Module
 
 const statusLabels = {
-    'scheduled': 'Lên lịch',
-    'ongoing': 'Đang diễn ra',
-    'completed': 'Hoàn thành',
-    'cancelled': 'Hủy'
+    scheduled: 'Len lich',
+    ongoing: 'Dang dien ra',
+    completed: 'Hoan thanh',
+    cancelled: 'Huy'
 };
 
 const statusColors = {
-    'scheduled': 'secondary',
-    'ongoing': 'warning',
-    'completed': 'success',
-    'cancelled': 'danger'
+    scheduled: 'secondary',
+    ongoing: 'warning',
+    completed: 'success',
+    cancelled: 'danger'
 };
 
-async function loadClassrooms() {
-    try {
-        const response = await fetch('/api/classrooms?per_page=100', {
-            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
-        });
-        if (!response.ok) throw new Error('Failed to load classrooms');
+async function loadLookups() {
+    await Promise.all([loadClassrooms(), loadSubjects(), loadRooms(), loadLecturers()]);
+}
 
-        const data = await response.json();
-        const filterSelect = document.getElementById('filterClassroom');
-
-        data.items.forEach(cls => {
+function appendOptions(selectIds, items, getLabel) {
+    selectIds.forEach(id => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const first = select.querySelector('option')?.outerHTML || '<option value="">--</option>';
+        select.innerHTML = first;
+        items.forEach(item => {
             const option = document.createElement('option');
-            option.value = cls.id;
-            option.textContent = cls.name;
-            filterSelect.appendChild(option);
+            option.value = item.id;
+            option.textContent = getLabel(item);
+            select.appendChild(option);
         });
-    } catch (error) {
-        console.error('Error loading classrooms:', error);
-    }
+    });
+}
+
+async function loadClassrooms() {
+    const response = await fetch('/api/classrooms?per_page=500&is_active=true', {
+        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+    });
+    const data = await response.json();
+    appendOptions(['filterClassroom', 'sessClassroom'], data.items || [], cls => cls.name || cls.code);
+}
+
+async function loadSubjects() {
+    const response = await fetch('/api/subjects?per_page=500&is_active=true', {
+        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+    });
+    const data = await response.json();
+    appendOptions(['filterSubject', 'sessSubject'], data.items || [], s => `${s.subject_name} (${s.subject_code})`);
+}
+
+async function loadRooms() {
+    const response = await fetch('/api/rooms?per_page=500&is_active=true', {
+        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+    });
+    const data = await response.json();
+    appendOptions(['sessRoom'], data.items || [], r => r.name || r.code);
+}
+
+async function loadLecturers() {
+    const response = await fetch('/api/lecturers?per_page=500&is_active=true', {
+        headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+    });
+    const data = await response.json();
+    appendOptions(['filterLecturer'], data.items || [], l => `${l.full_name} (${l.lecturer_code})`);
 }
 
 async function loadSessions() {
     try {
         showLoadingState();
+        const params = new URLSearchParams();
+        const dateFrom = document.getElementById('filterDateFrom')?.value;
+        const dateTo = document.getElementById('filterDateTo')?.value;
+        const classroomId = document.getElementById('filterClassroom')?.value;
+        const subjectId = document.getElementById('filterSubject')?.value;
+        const lecturerId = document.getElementById('filterLecturer')?.value;
+        const status = document.getElementById('filterStatus')?.value;
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
+        if (classroomId) params.set('classroom_id', classroomId);
+        if (subjectId) params.set('subject_id', subjectId);
+        if (lecturerId) params.set('lecturer_id', lecturerId);
+        if (status) params.set('status', status);
 
-        const response = await fetch('/api/class-sessions', {
+        const response = await fetch('/api/class-sessions?' + params.toString(), {
             headers: { 'Authorization': `Bearer ${auth.getToken()}` }
         });
-
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
         let sessions = await response.json();
-        if (!Array.isArray(sessions)) {
-            sessions = sessions.items || [];
-        }
-
-        // Apply filters
-        const filterDate = document.getElementById('filterDate')?.value;
-        const filterClassroom = document.getElementById('filterClassroom')?.value;
-        const filterStatus = document.getElementById('filterStatus')?.value;
-
-        if (filterDate) {
-            sessions = sessions.filter(s => s.session_date === filterDate);
-        }
-
-        if (filterClassroom) {
-            sessions = sessions.filter(s => s.classroom_id == filterClassroom);
-        }
-
-        if (filterStatus) {
-            sessions = sessions.filter(s => s.status === filterStatus);
-        }
-
-        // Sort by date and time
-        sessions.sort((a, b) => {
-            const dateA = new Date(a.session_date + ' ' + a.start_time);
-            const dateB = new Date(b.session_date + ' ' + b.start_time);
-            return dateA - dateB;
-        });
-
+        if (!Array.isArray(sessions)) sessions = sessions.items || [];
         renderSessionsTable(sessions);
-        hideLoadingState();
     } catch (error) {
         console.error('Error loading sessions:', error);
-        showAlert('Lỗi khi tải dữ liệu', 'danger');
+        showAlert('Loi khi tai du lieu: ' + error.message, 'danger');
         hideLoadingState();
     }
 }
@@ -87,6 +100,7 @@ function renderSessionsTable(sessions) {
     const tbody = document.getElementById('sessionsTable');
     const emptyState = document.getElementById('emptyState');
     const tableContainer = document.getElementById('tableContainer');
+    hideLoadingState();
 
     if (!sessions || sessions.length === 0) {
         emptyState.classList.remove('d-none');
@@ -96,70 +110,115 @@ function renderSessionsTable(sessions) {
 
     emptyState.classList.add('d-none');
     tableContainer.classList.remove('d-none');
-
     tbody.innerHTML = sessions.map(sess => {
-        const date = new Date(sess.session_date).toLocaleDateString('vi-VN');
+        const dateText = sess.session_date ? new Date(sess.session_date).toLocaleDateString('vi-VN') : '--';
         const startTime = sess.start_time ? sess.start_time.substring(0, 5) : '--:--';
         const endTime = sess.end_time ? sess.end_time.substring(0, 5) : '--:--';
         const statusColor = statusColors[sess.status] || 'secondary';
         const statusLabel = statusLabels[sess.status] || sess.status;
-
         return `
-        <tr>
-            <td>
-                <strong>${date}</strong>
-            </td>
-            <td>
-                ${startTime} - ${endTime}
-            </td>
-            <td>
-                <small>${escapeHtml(sess.classroom_name || '--')}</small>
-            </td>
-            <td>
-                <small>${escapeHtml(sess.subject_name || '--')}</small>
-            </td>
-            <td>
-                <small>${escapeHtml(sess.room_name || '-')}</small>
-            </td>
-            <td>
-                <span class="badge bg-${statusColor}">${statusLabel}</span>
-            </td>
-            <td>
-                <div class="btn-group btn-group-sm" role="group">
-                    <button class="btn btn-outline-info" onclick="openAttendance(${sess.id})" title="Điểm danh">
-                        <i class="bi bi-qr-code"></i>
-                    </button>
-                    <button class="btn btn-outline-warning" onclick="editStatus(${sess.id})" title="Sửa trạng thái">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-outline-danger" onclick="deleteSession(${sess.id})" title="Xóa">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `;
+            <tr>
+                <td><strong>${dateText}</strong><br><small class="text-muted">${sess.session_date || ''}</small></td>
+                <td>${startTime} - ${endTime}</td>
+                <td>${escapeHtml(sess.classroom_name || '--')}</td>
+                <td>${escapeHtml(sess.subject_name || '--')}</td>
+                <td>${escapeHtml(sess.lecturer_name || '--')}</td>
+                <td>${escapeHtml(sess.room_name || '-')}</td>
+                <td><span class="badge bg-${statusColor}">${statusLabel}</span></td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-info" onclick="openAttendance(${sess.id})" title="Diem danh"><i class="bi bi-qr-code"></i></button>
+                        <button class="btn btn-outline-warning" onclick="editSession(${sess.id})" title="Sua"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-outline-danger" onclick="deleteSession(${sess.id})" title="Xoa"><i class="bi bi-trash"></i></button>
+                    </div>
+                </td>
+            </tr>`;
     }).join('');
+}
+
+function resetSessionForm() {
+    document.getElementById('sessionForm').reset();
+    document.getElementById('sessionId').value = '';
+    document.getElementById('sessionModalTitle').textContent = 'Tao buoi hoc';
+    document.getElementById('sessStatus').value = 'scheduled';
+}
+
+async function editSession(id) {
+    try {
+        const response = await fetch(`/api/class-sessions/${id}`, {
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        const sess = await response.json();
+        if (!response.ok) throw new Error(sess.error || 'Khong tim thay buoi hoc');
+        document.getElementById('sessionId').value = sess.id;
+        document.getElementById('sessDate').value = sess.session_date || '';
+        document.getElementById('sessClassroom').value = sess.classroom_id || '';
+        document.getElementById('sessSubject').value = sess.subject_id || '';
+        document.getElementById('sessRoom').value = sess.room_id || '';
+        document.getElementById('sessStart').value = (sess.start_time || '').substring(0, 5);
+        document.getElementById('sessEnd').value = (sess.end_time || '').substring(0, 5);
+        document.getElementById('sessStatus').value = sess.status || 'scheduled';
+        document.getElementById('sessNotes').value = sess.notes || '';
+        document.getElementById('sessionModalTitle').textContent = 'Sua buoi hoc';
+        new bootstrap.Modal(document.getElementById('sessionModal')).show();
+    } catch (error) {
+        showAlert('Loi: ' + error.message, 'danger');
+    }
+}
+
+async function saveSession(event) {
+    event.preventDefault();
+    const id = document.getElementById('sessionId').value;
+    const body = {
+        session_date: document.getElementById('sessDate').value,
+        classroom_id: parseInt(document.getElementById('sessClassroom').value),
+        subject_id: parseInt(document.getElementById('sessSubject').value),
+        room_id: document.getElementById('sessRoom').value ? parseInt(document.getElementById('sessRoom').value) : null,
+        start_time: document.getElementById('sessStart').value,
+        end_time: document.getElementById('sessEnd').value,
+        status: document.getElementById('sessStatus').value,
+        notes: document.getElementById('sessNotes').value || null
+    };
+    if (!body.session_date || !body.classroom_id || !body.subject_id || !body.start_time || !body.end_time) {
+        showAlert('Vui long dien day du thong tin bat buoc', 'warning');
+        return;
+    }
+    if (body.start_time >= body.end_time) {
+        showAlert('Gio ket thuc phai sau gio bat dau', 'warning');
+        return;
+    }
+    try {
+        const response = await fetch(id ? `/api/class-sessions/${id}` : '/api/class-sessions', {
+            method: id ? 'PUT' : 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${auth.getToken()}`
+            },
+            body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Loi luu buoi hoc');
+        bootstrap.Modal.getInstance(document.getElementById('sessionModal')).hide();
+        showAlert(data.message || 'Da luu', 'success');
+        await loadSessions();
+    } catch (error) {
+        showAlert('Loi: ' + error.message, 'danger');
+    }
 }
 
 async function generateSessions(event) {
     event.preventDefault();
-
     const startDate = document.getElementById('genStartDate').value;
     const endDate = document.getElementById('genEndDate').value;
-
     if (!startDate || !endDate) {
-        showAlert('Vui lòng chọn ngày bắt đầu và kết thúc', 'warning');
+        showAlert('Vui long chon ngay bat dau va ket thuc', 'warning');
         return;
     }
-
     if (startDate > endDate) {
-        showAlert('Ngày bắt đầu phải trước ngày kết thúc', 'warning');
+        showAlert('Ngay bat dau phai truoc ngay ket thuc', 'warning');
         return;
     }
-
     setSubmitLoading('genSubmitBtn', true);
-
     try {
         const response = await fetch('/api/class-sessions/generate', {
             method: 'POST',
@@ -167,95 +226,39 @@ async function generateSessions(event) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${auth.getToken()}`
             },
-            body: JSON.stringify({
-                start_date: startDate,
-                end_date: endDate
-            })
+            body: JSON.stringify({ start_date: startDate, end_date: endDate })
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Lỗi khi tạo buổi học');
-        }
-
+        if (!response.ok) throw new Error(data.error || 'Loi tao buoi hoc');
         showAlert(data.message, 'success');
         bootstrap.Modal.getInstance(document.getElementById('generateModal')).hide();
         document.getElementById('generateForm').reset();
         await loadSessions();
     } catch (error) {
-        console.error('Error generating sessions:', error);
-        showAlert('Lỗi: ' + error.message, 'danger');
+        showAlert('Loi: ' + error.message, 'danger');
     } finally {
         setSubmitLoading('genSubmitBtn', false);
     }
 }
 
-async function editStatus(id) {
-    document.getElementById('statusSessionId').value = id;
-    const modal = new bootstrap.Modal(document.getElementById('statusModal'));
-    modal.show();
-}
-
-async function saveStatus(event) {
-    event.preventDefault();
-
-    const id = document.getElementById('statusSessionId').value;
-    const status = document.getElementById('statusSelect').value;
-
-    try {
-        const response = await fetch(`/api/class-sessions/${id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${auth.getToken()}`
-            },
-            body: JSON.stringify({ status })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Lỗi khi cập nhật');
-        }
-
-        showAlert(data.message, 'success');
-        bootstrap.Modal.getInstance(document.getElementById('statusModal')).hide();
-        await loadSessions();
-    } catch (error) {
-        console.error('Error saving status:', error);
-        showAlert('Lỗi: ' + error.message, 'danger');
-    }
-}
-
 async function deleteSession(id) {
-    if (!confirm('Bạn có chắc muốn xóa buổi học này?')) {
-        return;
-    }
-
+    if (!confirm('Xoa buoi hoc nay?')) return;
     try {
         const response = await fetch(`/api/class-sessions/${id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${auth.getToken()}` }
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Lỗi khi xóa');
-        }
-
-        showAlert('Xóa thành công', 'success');
+        if (!response.ok) throw new Error(data.error || 'Loi xoa');
+        showAlert('Da xoa buoi hoc', 'success');
         await loadSessions();
     } catch (error) {
-        console.error('Error deleting session:', error);
-        showAlert('Lỗi: ' + error.message, 'danger');
+        showAlert('Loi: ' + error.message, 'danger');
     }
 }
 
 function openAttendance(id) {
-    // TODO: Navigate to attendance page or open QR modal
-    showAlert('Tính năng điểm danh sẽ được cập nhật', 'info');
+    window.open(`/attendance/checkin/${id}`, '_blank');
 }
 
 function showLoadingState() {
@@ -269,42 +272,29 @@ function hideLoadingState() {
 }
 
 function showAlert(message, type = 'info') {
-    const alertHTML = `
-        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    `;
-
     const container = document.getElementById('alertContainer');
     const div = document.createElement('div');
-    div.innerHTML = alertHTML;
+    div.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+        ${escapeHtml(message)}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>`;
     container.appendChild(div.firstElementChild);
-
-    setTimeout(() => {
-        container.firstElementChild?.remove();
-    }, 5000);
+    setTimeout(() => container.firstElementChild?.remove(), 5000);
 }
 
 function setSubmitLoading(btnId, loading) {
     const btn = document.getElementById(btnId);
     const text = document.getElementById(btnId + 'Text');
     const spinner = document.getElementById(btnId + 'Spinner');
-
-    if (loading) {
-        btn.disabled = true;
-        text.classList.add('d-none');
-        spinner.classList.remove('d-none');
-    } else {
-        btn.disabled = false;
-        text.classList.remove('d-none');
-        spinner.classList.add('d-none');
-    }
+    if (!btn || !text || !spinner) return;
+    btn.disabled = loading;
+    text.classList.toggle('d-none', loading);
+    spinner.classList.toggle('d-none', !loading);
 }
 
 function escapeHtml(text) {
-    if (!text) return '';
+    if (text === null || text === undefined) return '';
     const div = document.createElement('div');
-    div.textContent = text;
+    div.textContent = String(text);
     return div.innerHTML;
 }

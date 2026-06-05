@@ -222,18 +222,45 @@
     }
 
     // ── Active Session Polling ─────────────────────────────────────────────────
+    // Poll every 15s. Pause when tab hidden. Backoff 60s on 429.
+
+    const POLL_INTERVAL_MS  = 15000;
+    const BACKOFF_429_MS    = 60000;
+    let _pollBackoffTimer   = null;
+    let _pollPaused         = false;
 
     function startSessionPolling() {
-        pollActiveSessions(); // immediate
-        sessionPollTimer = setInterval(pollActiveSessions, 7000);
+        pollActiveSessions();
+        if (sessionPollTimer) clearInterval(sessionPollTimer);
+        sessionPollTimer = setInterval(() => {
+            if (!_pollPaused) pollActiveSessions();
+        }, POLL_INTERVAL_MS);
     }
 
+    // Pause polling when tab is hidden, resume when visible
+    document.addEventListener('visibilitychange', () => {
+        _pollPaused = document.hidden;
+        if (!document.hidden) pollActiveSessions();
+    });
+
     async function pollActiveSessions() {
+        if (_pollPaused) return;
         try {
-            const data = await api.getActiveSessions();
+            const resp = await fetch('/api/student/active-sessions', {
+                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+            });
+            if (resp.status === 429) {
+                // Back off: pause for 60s
+                _pollPaused = true;
+                if (_pollBackoffTimer) clearTimeout(_pollBackoffTimer);
+                _pollBackoffTimer = setTimeout(() => { _pollPaused = false; }, BACKOFF_429_MS);
+                return;
+            }
+            if (!resp.ok) return;
+            const data = await resp.json();
             renderActiveSessionsBanner(data.sessions || []);
         } catch(e) {
-            console.error('Session poll error:', e);
+            // Network error — silently ignore, retry next interval
         }
     }
 

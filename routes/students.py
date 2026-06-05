@@ -19,13 +19,17 @@ def list_students():
     department_id = request.args.get('department_id', type=int)
     major_id = request.args.get('major_id', type=int)
     program_id = request.args.get('program_id', type=int)
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
     face_registered = request.args.get('face_registered', '').lower()
     
     query = Student.query.filter_by(is_deleted=False)
     
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+    
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     if department_id:
         query = query.filter_by(department_id=department_id)
     if major_id:

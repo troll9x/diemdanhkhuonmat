@@ -14,12 +14,16 @@ programs_bp = Blueprint('programs', __name__)
 def list_programs():
     """List all programs with pagination and filters."""
     search = request.args.get('search', '').strip()
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
 
     query = Program.query.filter_by(is_deleted=False)
 
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     if search:
         query = query.filter(
             (Program.name.ilike(f'%{search}%')) |

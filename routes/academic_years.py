@@ -14,13 +14,17 @@ academic_years_bp = Blueprint('academic_years', __name__)
 def list_academic_years():
     """List all academic years with pagination and filters."""
     search = request.args.get('search', '').strip()
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
     is_current = request.args.get('is_current', type=bool)
     
     query = AcademicYear.query
     
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+    
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     if is_current is not None:
         query = query.filter_by(is_current=is_current)
     if search:

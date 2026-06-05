@@ -14,12 +14,16 @@ campuses_bp = Blueprint('campuses', __name__)
 def list_campuses():
     """List all campuses with pagination and filters."""
     search = request.args.get('search', '').strip()
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
 
     query = Campus.query.filter_by(is_deleted=False)
 
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     if search:
         query = query.filter(
             (Campus.name.ilike(f'%{search}%')) |

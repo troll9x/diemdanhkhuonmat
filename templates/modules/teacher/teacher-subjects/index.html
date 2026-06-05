@@ -47,21 +47,30 @@
             const data = await api.get('/dashboards/lecturer/overview');
             const classes = data.classes || [];
 
-            // Deduplicate subjects from classes
+            // Deduplicate subjects from classes; each class has a subjects[] array
             const subjectMap = {};
             classes.forEach(c => {
-                if (c.subject_id) {
-                    if (!subjectMap[c.subject_id]) {
-                        subjectMap[c.subject_id] = {
-                            id: c.subject_id,
-                            name: c.subject_name || '—',
-                            code: c.subject_code || '—',
-                            credits: c.credits ?? '—',
-                            department: c.department_name || '—',
+                const subjs = c.subjects || [];
+                subjs.forEach(s => {
+                    if (!subjectMap[s.id]) {
+                        subjectMap[s.id] = {
+                            id: s.id,
+                            name: s.subject_name || s.name || '—',
+                            code: s.subject_code || '—',
+                            credits: s.credits ?? '—',
+                            department: '—',
                             count: 0
                         };
                     }
-                    subjectMap[c.subject_id].count++;
+                    subjectMap[s.id].count++;
+                });
+                // Fallback: if subjects[] empty but subject_name is set on class
+                if (!subjs.length && c.subject_name) {
+                    const key = c.id + '_' + c.subject_name;
+                    if (!subjectMap[key]) {
+                        subjectMap[key] = { id: key, name: c.subject_name, code: '—', credits: '—', department: '—', count: 0 };
+                    }
+                    subjectMap[key].count++;
                 }
             });
 

@@ -18,6 +18,20 @@ from config.permissions import (
 dashboards_bp = Blueprint('dashboards', __name__)
 
 
+def _classroom_subjects(classroom_id):
+    """Return active subjects assigned to a classroom through ClassroomSubject."""
+    rows = ClassroomSubject.query.filter_by(classroom_id=classroom_id).all()
+    return [
+        row.subject for row in rows
+        if row.subject and not row.subject.is_deleted and row.subject.is_active
+    ]
+
+
+def _first_subject_name(classroom_id):
+    subjects = _classroom_subjects(classroom_id)
+    return subjects[0].subject_name if subjects else None
+
+
 # ============================================================
 # ADMIN DASHBOARD
 # ============================================================
@@ -235,7 +249,7 @@ def classroom_performance():
         performance.append({
             'classroom_id': classroom.id,
             'classroom_name': classroom.class_name,
-            'subject': classroom.subject.subject_name if classroom.subject else None,
+            'subject': _first_subject_name(classroom.id),
             'enrolled_students': enrolled_students,
             'total_sessions': total_sessions,
             'completed_sessions': completed_sessions,
@@ -302,10 +316,14 @@ def lecturer_overview():
     classes_list = []
     for c in assigned_classrooms:
         student_count = ClassroomStudent.query.filter_by(classroom_id=c.id).count()
-        subj_rows = ClassroomSubject.query.filter_by(classroom_id=c.id).all()
         subjects = [
-            {'id': r.subject.id, 'subject_name': r.subject.subject_name}
-            for r in subj_rows if r.subject and not r.subject.is_deleted
+            {
+                'id': subject.id,
+                'subject_code': subject.subject_code,
+                'subject_name': subject.subject_name,
+                'credits': subject.credits,
+            }
+            for subject in _classroom_subjects(c.id)
         ]
         classes_list.append({
             'id': c.id,
@@ -412,7 +430,7 @@ def lecturer_class_stats(classroom_id):
         'classroom': {
             'id': classroom.id,
             'name': classroom.class_name,
-            'subject': classroom.subject.subject_name if classroom.subject else None
+            'subject': _first_subject_name(classroom.id)
         },
         'stats': {
             'total_sessions': len(sessions),
@@ -469,8 +487,14 @@ def lecturer_sessions():
         
         result.append({
             'id': session.id,
+            'classroom_id': session.classroom_id,
+            'subject_id': session.subject_id,
+            'room_id': session.room_id,
             'classroom': session.classroom.class_name if session.classroom else None,
+            'classroom_name': session.classroom.class_name if session.classroom else None,
             'subject': session.subject.subject_name if session.subject else None,
+            'subject_name': session.subject.subject_name if session.subject else None,
+            'room_name': session.room.name if session.room else None,
             'session_date': session.session_date.isoformat(),
             'start_time': session.start_time.strftime('%H:%M') if session.start_time else None,
             'end_time': session.end_time.strftime('%H:%M') if session.end_time else None,

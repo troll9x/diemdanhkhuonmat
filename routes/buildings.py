@@ -15,12 +15,16 @@ def list_buildings():
     """List all buildings with pagination and filters."""
     search = request.args.get('search', '').strip()
     campus_id = request.args.get('campus_id', type=int)
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
 
     query = Building.query.filter_by(is_deleted=False)
 
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     if campus_id:
         query = query.filter_by(campus_id=campus_id)
     if search:

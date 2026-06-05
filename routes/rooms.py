@@ -1,6 +1,6 @@
 """Room management routes."""
 from flask import Blueprint, jsonify, request
-from models import db, Room, Building
+from models import db, Room, Building, ClassSchedule, ClassSession
 from utils.decorators import jwt_required, admin_only
 from utils.pagination import paginate
 from middleware.rate_limit import limiter
@@ -16,12 +16,16 @@ def list_rooms():
     search = request.args.get('search', '').strip()
     building_id = request.args.get('building_id', type=int)
     room_type = request.args.get('room_type', '').strip()
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
     
     query = Room.query.filter_by(is_deleted=False)
     
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+    
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     if building_id:
         query = query.filter_by(building_id=building_id)
     if room_type:
@@ -208,9 +212,11 @@ def delete_room(id):
     if not room:
         return jsonify({'error': 'Room not found'}), 404
     
-    # Check if room is in use
-    if room.classrooms.filter_by(is_deleted=False).count() > 0:
-        return jsonify({'error': 'Cannot delete room with associated classrooms'}), 409
+    # Check if room is referenced by any active schedule or session
+    if ClassSchedule.query.filter_by(room_id=id).count() > 0:
+        return jsonify({'error': 'Không thể xóa phòng học đang được sử dụng trong thời khóa biểu'}), 409
+    if ClassSession.query.filter_by(room_id=id).count() > 0:
+        return jsonify({'error': 'Không thể xóa phòng học đang được sử dụng trong buổi học'}), 409
     
     room.is_deleted = True
     room.deleted_at = datetime.utcnow()

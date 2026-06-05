@@ -22,9 +22,13 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key-change-in-production')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(seconds=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 3600)))
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(seconds=int(os.getenv('JWT_REFRESH_TOKEN_EXPIRES', 2592000)))
-    JWT_TOKEN_LOCATION = ['headers']
+    # Accept token from both Authorization header AND cookie (so browser can test APIs when logged in)
+    JWT_TOKEN_LOCATION = ['headers', 'cookies']
     JWT_HEADER_NAME = 'Authorization'
     JWT_HEADER_TYPE = 'Bearer'
+    JWT_ACCESS_COOKIE_NAME = 'access_token'   # must match auth.js tokenKey
+    JWT_COOKIE_SECURE = os.getenv('FLASK_ENV', 'development') == 'production'
+    JWT_COOKIE_SAMESITE = 'Lax'
     
     # Security
     BCRYPT_LOG_ROUNDS = int(os.getenv('BCRYPT_LOG_ROUNDS', 12))

@@ -310,6 +310,7 @@ def complete_registration():
 
 
 @student_api_bp.route('/active-sessions', methods=['GET'])
+@limiter.exempt
 @jwt_required()
 @student_only
 def get_active_sessions():

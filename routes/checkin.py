@@ -35,7 +35,7 @@ def student_checkin():
     if not session:
         return jsonify({'status': 'session_not_found', 'message': 'Buổi học không tồn tại'}), 404
 
-    if session.status not in ['scheduled', 'ongoing']:
+    if session.status != 'ongoing':
         labels = {'completed': 'đã kết thúc', 'cancelled': 'đã hủy'}
         label = labels.get(session.status, session.status)
         return jsonify({'status': 'session_closed', 'message': f'Buổi học {label}, không thể điểm danh'}), 400
@@ -75,8 +75,6 @@ def student_checkin():
             user_agent=(request.headers.get('User-Agent') or '')[:255]
         )
         db.session.add(record)
-        if session.status == 'scheduled':
-            session.status = 'ongoing'
         db.session.commit()
         return jsonify({
             'status': 'success',
@@ -115,8 +113,6 @@ def student_checkin():
         user_agent=(request.headers.get('User-Agent') or '')[:255]
     )
     db.session.add(record)
-    if session.status == 'scheduled':
-        session.status = 'ongoing'
     db.session.commit()
 
     return jsonify({

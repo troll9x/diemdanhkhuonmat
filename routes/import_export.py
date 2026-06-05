@@ -573,7 +573,6 @@ def export_lecturers():
             'department_id',
             'phone',
             'is_active',
-            'face_registered',
         ]
         writer.writerow(headers)
         
@@ -586,7 +585,6 @@ def export_lecturers():
                 lecturer.department_id,
                 lecturer.phone or '',
                 'Yes' if lecturer.is_active else 'No',
-                'Yes' if lecturer.face_registered else 'No',
             ])
         
         output.seek(0)

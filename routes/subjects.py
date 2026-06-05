@@ -16,13 +16,17 @@ def list_subjects():
     # Filters
     search = request.args.get('search', '').strip()
     department_id = request.args.get('department_id', type=int)
-    is_active = request.args.get('is_active', 'true').lower() == 'true'
+    _ia = request.args.get('is_active', '')
     
     # Build query
     query = Subject.query.filter_by(is_deleted=False)
     
-    if is_active is not None:
-        query = query.filter_by(is_active=is_active)
+    if _ia.lower() == 'true':
+        query = query.filter_by(is_active=True)
+
+    
+    elif _ia.lower() == 'false':
+        query = query.filter_by(is_active=False)
     
     if department_id:
         query = query.filter_by(department_id=department_id)

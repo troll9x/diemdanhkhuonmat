@@ -32,6 +32,28 @@ async function loadLecturers() {
     }
 }
 
+async function loadSubjectOptions() {
+    try {
+        const response = await fetch('/api/subjects?per_page=500&is_active=true', {
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        if (!response.ok) throw new Error('Failed to load subjects');
+
+        const data = await response.json();
+        const select = document.getElementById('subSelect');
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Chon mon hoc --</option>';
+        (data.items || []).forEach(subject => {
+            const option = document.createElement('option');
+            option.value = subject.id;
+            option.textContent = `${subject.subject_name} (${subject.subject_code})`;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading subjects:', error);
+    }
+}
+
 async function loadClassrooms(page = 1) {
     try {
         showLoadingState();
@@ -123,6 +145,19 @@ function renderClassroomsTable(classrooms) {
             </td>
         </tr>
     `).join('');
+
+    Array.from(tbody.querySelectorAll('tr')).forEach((row, index) => {
+        const cls = classrooms[index];
+        const group = row.querySelector('.btn-group');
+        if (!cls || !group) return;
+        group.insertAdjacentHTML('beforeend', `
+            <button class="btn btn-outline-primary"
+                    onclick="openSubjectsPanel(${cls.id}, '${String(cls.name || '').replace(/'/g, '&#39;')}')"
+                    title="Subjects">
+                <i class="bi bi-journal-bookmark"></i>
+            </button>
+        `);
+    });
 }
 
 function renderPagination(pagination, currentPageNum) {
@@ -481,5 +516,94 @@ async function removeStudentFromClass(studentId) {
         await loadClassrooms(currentPage);
     } catch (e) {
         showAlert('Lỗi: ' + e.message, 'danger');
+    }
+}
+
+// Subject Management Panel
+let _subClassroomId = null;
+
+async function openSubjectsPanel(classroomId, className) {
+    _subClassroomId = classroomId;
+    document.getElementById('subClassName').textContent = className;
+    document.getElementById('subSelect').value = '';
+    const modal = new bootstrap.Modal(document.getElementById('subjectsModal'));
+    modal.show();
+    await loadClassSubjects();
+}
+
+async function loadClassSubjects() {
+    const tbody = document.getElementById('subSubjectsTable');
+    try {
+        const res = await fetch(`/api/classrooms/${_subClassroomId}/subjects`, {
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load subjects');
+        const subjects = data.subjects || [];
+        document.getElementById('subCount').textContent = subjects.length;
+
+        if (!subjects.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Chua co mon hoc</td></tr>';
+            return;
+        }
+        tbody.innerHTML = subjects.map(subject => `
+            <tr>
+                <td><code>${escapeHtml(subject.subject_code)}</code></td>
+                <td>${escapeHtml(subject.subject_name)}</td>
+                <td>${subject.credits ?? '—'}</td>
+                <td>
+                    <button class="btn btn-danger btn-sm"
+                            onclick="removeSubjectFromClass(${subject.id})"
+                            title="Remove">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-danger text-center py-2">Loi: ${e.message}</td></tr>`;
+    }
+}
+
+async function addSubjectToClass() {
+    const subjectId = document.getElementById('subSelect').value;
+    if (!subjectId) {
+        showAlert('Vui long chon mon hoc', 'warning');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/classrooms/${_subClassroomId}/subjects`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${auth.getToken()}`
+            },
+            body: JSON.stringify({ subject_ids: [parseInt(subjectId)] })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Loi them mon hoc');
+        showAlert(data.message || 'Da them mon hoc', 'success');
+        document.getElementById('subSelect').value = '';
+        await loadClassSubjects();
+        await loadClassrooms(currentPage);
+    } catch (e) {
+        showAlert('Loi: ' + e.message, 'danger');
+    }
+}
+
+async function removeSubjectFromClass(subjectId) {
+    if (!confirm('Xoa mon hoc khoi lop nay?')) return;
+    try {
+        const res = await fetch(`/api/classrooms/${_subClassroomId}/subjects/${subjectId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${auth.getToken()}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Loi xoa mon hoc');
+        showAlert('Da xoa mon hoc khoi lop', 'success');
+        await loadClassSubjects();
+        await loadClassrooms(currentPage);
+    } catch (e) {
+        showAlert('Loi: ' + e.message, 'danger');
     }
 }

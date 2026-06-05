@@ -184,6 +184,51 @@
         </div>
     </div>
 </div>
+
+<!-- Subject Management Modal -->
+<div class="modal fade" id="subjectsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-journal-bookmark"></i> Mon hoc trong lop:
+                    <span id="subClassName" class="text-primary"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Them mon hoc vao lop</label>
+                    <div class="input-group">
+                        <select id="subSelect" class="form-select">
+                            <option value="">-- Chon mon hoc --</option>
+                        </select>
+                        <button class="btn btn-outline-primary" onclick="addSubjectToClass()">
+                            <i class="bi bi-plus-circle"></i> Them
+                        </button>
+                    </div>
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold">Danh sach mon hoc (<span id="subCount">0</span>)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr><th>Ma mon</th><th>Ten mon</th><th>Tin chi</th><th></th></tr>
+                        </thead>
+                        <tbody id="subSubjectsTable">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Dang tai...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Dong</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -191,6 +236,7 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         loadLecturers();
+        loadSubjectOptions();
         loadClassrooms();
 
         document.getElementById('searchInput').addEventListener('keypress', function(e) {
