@@ -75,3 +75,4 @@ htmlcov/
 Thumbs.db
 # Local notes
 heading.md
+.claude/
