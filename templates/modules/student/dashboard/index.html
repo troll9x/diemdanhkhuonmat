@@ -1,313 +1,68 @@
 {% extends "layouts/base.html" %}
-
-{% block title %}Dashboard Sinh viên - Smart Attendance{% endblock %}
+{% block title %}Dashboard — Sinh viên{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Dashboard Sinh viên</h2>
-
-<!-- ── Face Registration Alert (shown when not registered) ──────────────────── -->
-<div id="faceRegAlert" class="alert alert-warning d-flex align-items-center d-none mb-4" role="alert">
-    <i class="bi bi-exclamation-triangle-fill fs-4 me-3 flex-shrink-0"></i>
+<div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <strong>Bạn chưa đăng ký khuôn mặt!</strong>
-        Hãy đăng ký khuôn mặt để có thể điểm danh bằng nhận diện AI.
-        <a href="/student/face-registration" class="btn btn-warning btn-sm ms-2">
-            <i class="bi bi-person-bounding-box"></i> Đăng ký ngay
+        <h4 class="fw-bold mb-1">Dashboard Sinh viên</h4>
+        <p class="text-muted mb-0" id="welcomeMsg">Xin chào!</p>
+    </div>
+    <a href="/student/join-class" class="btn btn-primary">
+        <i class="bi bi-door-open me-2"></i>Tham gia lớp
+    </a>
+</div>
+
+<!-- Face registration alert -->
+<div id="faceAlert"></div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4">
+        <div class="stat-card text-center">
+            <div class="stat-value" id="totalClasses">—</div>
+            <div class="stat-label"><i class="bi bi-grid me-1"></i>Lớp đã tham gia</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4">
+        <div class="stat-card text-center">
+            <div id="faceStatus" class="stat-value text-danger">—</div>
+            <div class="stat-label"><i class="bi bi-person-bounding-box me-1"></i>Khuôn mặt</div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="stat-card text-center">
+            <div class="stat-value text-success" id="openSessionCount">—</div>
+            <div class="stat-label"><i class="bi bi-broadcast me-1"></i>Phiên đang mở</div>
+        </div>
+    </div>
+</div>
+
+<!-- Open sessions -->
+<div class="card mb-4" id="openSessionsCard">
+    <div class="card-header"><i class="bi bi-broadcast-pin me-2 text-success"></i>Phiên điểm danh đang mở</div>
+    <div class="card-body p-0" id="openSessionsList">
+        <div class="text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm me-2"></div>Đang kiểm tra...
+        </div>
+    </div>
+</div>
+
+<!-- My classes -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-grid-3x3-gap me-2"></i>Lớp học của tôi</span>
+        <a href="/student/join-class" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-plus me-1"></i>Tham gia lớp
         </a>
     </div>
-</div>
-
-<!-- ── Active Session Notifications ──────────────────────────────────────────── -->
-<div id="activeSessionsBanner" class="mb-4"></div>
-
-<!-- Profile + Stats -->
-<div class="row mb-4">
-    <div class="col-md-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <img id="user-avatar" src="https://via.placeholder.com/100" alt="Avatar"
-                     class="rounded-circle mb-3" width="100" height="100">
-                <h5 id="profile-name">—</h5>
-                <p id="profile-code" class="text-muted mb-1">—</p>
-                <p id="profile-email" class="text-muted small mb-2">—</p>
-                <span id="face-badge" class="badge bg-secondary">Chưa đăng ký khuôn mặt</span>
-                <div class="mt-2">
-                    <a href="/student/face-registration" id="face-reg-btn"
-                       class="btn btn-sm btn-outline-primary d-none">
-                        <i class="bi bi-person-bounding-box"></i> Đăng ký khuôn mặt
-                    </a>
-                </div>
-            </div>
+    <div class="card-body p-0" id="myClassesList">
+        <div class="text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm me-2"></div>Đang tải...
         </div>
-    </div>
-    <div class="col-md-8">
-        <div class="row g-3">
-            <div class="col-6">
-                <div class="stat-card text-center">
-                    <div class="stat-value text-primary"  id="stat-total">—</div>
-                    <div class="stat-label">Tổng Buổi học</div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="stat-card text-center">
-                    <div class="stat-value text-success" id="stat-present">—</div>
-                    <div class="stat-label">Có mặt</div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="stat-card text-center">
-                    <div class="stat-value text-danger"  id="stat-absent">—</div>
-                    <div class="stat-label">Vắng</div>
-                </div>
-            </div>
-            <div class="col-6">
-                <div class="stat-card text-center">
-                    <div class="stat-value text-info"   id="stat-rate">—%</div>
-                    <div class="stat-label">Tỷ lệ Có mặt</div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Attendance History -->
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Lịch sử Điểm danh</span>
-        <div class="d-flex gap-2">
-            <input type="date" id="filter-date" class="form-control form-control-sm" style="width:150px;">
-            <button class="btn btn-sm btn-primary" onclick="loadAttendance()"><i class="bi bi-search"></i> Lọc</button>
-            <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">Xóa</button>
-        </div>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>#</th><th>Lớp học</th><th>Môn học</th>
-                    <th>Ngày</th><th>Giờ điểm danh</th><th>Trạng thái</th>
-                </tr>
-            </thead>
-            <tbody id="attendance-table">
-                <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- Enrolled Classes -->
-<div class="card">
-    <div class="card-header">Lớp học của tôi</div>
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr><th>Tên lớp</th><th>Mã lớp</th><th>Giảng viên</th></tr>
-            </thead>
-            <tbody id="classes-table">
-                <tr><td colspan="3" class="text-center text-muted py-4">Đang tải...</td></tr>
-            </tbody>
-        </table>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    requireAuth();
-    if (!auth.hasRole('student')) window.location.href = '/login';
-
-    let sessionPollTimer = null;
-
-    document.addEventListener('DOMContentLoaded', async () => {
-        const user = auth.getUser();
-        const nameEl = document.getElementById('user-name');
-        if (nameEl && user) nameEl.textContent = user.name || user.full_name || '';
-
-        await Promise.all([loadProfile(), loadStats(), loadAttendance()]);
-        startSessionPolling();
-    });
-
-    // ── Profile ────────────────────────────────────────────────────────────────
-
-    async function loadProfile() {
-        try {
-            const data = await api.getStudentDashboard();
-            const s = data.student || {};
-
-            document.getElementById('profile-name').textContent  = s.full_name     || '—';
-            document.getElementById('profile-code').textContent  = s.student_code  || '—';
-            document.getElementById('profile-email').textContent = s.email         || '—';
-
-            const faceBadge = document.getElementById('face-badge');
-            const faceRegBtn = document.getElementById('face-reg-btn');
-            const faceRegAlert = document.getElementById('faceRegAlert');
-
-            if (data.face_registration && data.face_registration.registered) {
-                faceBadge.className = 'badge bg-success';
-                faceBadge.textContent = `Khuôn mặt đã đăng ký (${data.face_registration.embedding_count} mẫu)`;
-                faceRegBtn.classList.add('d-none');
-            } else {
-                // Bắt buộc đăng ký khuôn mặt trước khi vào dashboard
-                window.location.href = '/student/face-registration';
-                return;
-            }
-
-            const classes = data.enrolled_classrooms || [];
-            const ctbody  = document.getElementById('classes-table');
-            if (!classes.length) {
-                ctbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-4">Chưa đăng ký lớp học nào</td></tr>';
-            } else {
-                ctbody.innerHTML = classes.map(c => `
-                    <tr>
-                        <td><strong>${esc(c.name)}</strong></td>
-                        <td><code>${esc(c.code || '')}</code></td>
-                        <td>${esc(c.lecturer || '—')}</td>
-                    </tr>
-                `).join('');
-            }
-        } catch(e) {
-            console.error('Profile error:', e);
-        }
-    }
-
-    // ── Stats ──────────────────────────────────────────────────────────────────
-
-    async function loadStats() {
-        try {
-            const data = await api.get('/dashboards/student/attendance-stats');
-            const s = data.overall_stats || {};
-            document.getElementById('stat-total').textContent   = s.total_records ?? '—';
-            document.getElementById('stat-present').textContent = s.present        ?? '—';
-            document.getElementById('stat-absent').textContent  = s.absent         ?? '—';
-            document.getElementById('stat-rate').textContent    = (s.attendance_rate != null ? Math.round(s.attendance_rate) + '%' : '—');
-        } catch(e) {
-            console.error('Stats error:', e);
-        }
-    }
-
-    // ── Attendance History ─────────────────────────────────────────────────────
-
-    async function loadAttendance() {
-        const tbody = document.getElementById('attendance-table');
-        try {
-            const params = new URLSearchParams({ limit: 50 });
-            const d = document.getElementById('filter-date').value;
-            const data = await api.get('/dashboards/student/attendance-history?' + params.toString());
-            let history = data.history || [];
-            if (d) history = history.filter(r => (r.session_date || '').startsWith(d));
-
-            if (!history.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
-                return;
-            }
-            tbody.innerHTML = history.map((r, i) => `
-                <tr>
-                    <td>${i + 1}</td>
-                    <td>${esc(r.classroom)}</td>
-                    <td>${esc(r.subject)}</td>
-                    <td>${r.session_date || '—'}</td>
-                    <td>${r.check_in_time ? new Date(r.check_in_time).toLocaleTimeString('vi-VN') : '—'}</td>
-                    <td>${statusBadge(r.status)}</td>
-                </tr>
-            `).join('');
-        } catch(e) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Lỗi tải dữ liệu</td></tr>';
-            console.error(e);
-        }
-    }
-
-    function clearFilters() {
-        document.getElementById('filter-date').value = '';
-        loadAttendance();
-    }
-
-    // ── Active Session Polling ─────────────────────────────────────────────────
-    // Poll every 15s. Pause when tab hidden. Backoff 60s on 429.
-
-    const POLL_INTERVAL_MS  = 15000;
-    const BACKOFF_429_MS    = 60000;
-    let _pollBackoffTimer   = null;
-    let _pollPaused         = false;
-
-    function startSessionPolling() {
-        pollActiveSessions();
-        if (sessionPollTimer) clearInterval(sessionPollTimer);
-        sessionPollTimer = setInterval(() => {
-            if (!_pollPaused) pollActiveSessions();
-        }, POLL_INTERVAL_MS);
-    }
-
-    // Pause polling when tab is hidden, resume when visible
-    document.addEventListener('visibilitychange', () => {
-        _pollPaused = document.hidden;
-        if (!document.hidden) pollActiveSessions();
-    });
-
-    async function pollActiveSessions() {
-        if (_pollPaused) return;
-        try {
-            const resp = await fetch('/api/student/active-sessions', {
-                headers: { 'Authorization': `Bearer ${auth.getToken()}` }
-            });
-            if (resp.status === 429) {
-                // Back off: pause for 60s
-                _pollPaused = true;
-                if (_pollBackoffTimer) clearTimeout(_pollBackoffTimer);
-                _pollBackoffTimer = setTimeout(() => { _pollPaused = false; }, BACKOFF_429_MS);
-                return;
-            }
-            if (!resp.ok) return;
-            const data = await resp.json();
-            renderActiveSessionsBanner(data.sessions || []);
-        } catch(e) {
-            // Network error — silently ignore, retry next interval
-        }
-    }
-
-    function renderActiveSessionsBanner(sessions) {
-        const container = document.getElementById('activeSessionsBanner');
-        if (!sessions.length) {
-            container.innerHTML = '';
-            return;
-        }
-
-        container.innerHTML = sessions.map(s => {
-            if (s.already_attended) {
-                return `
-                    <div class="alert alert-success d-flex align-items-center mb-2">
-                        <i class="bi bi-check-circle-fill fs-5 me-3 flex-shrink-0"></i>
-                        <div>
-                            <strong>Đã điểm danh:</strong>
-                            ${esc(s.subject)} – Lớp ${esc(s.classroom)}
-                            (${s.session_date} ${s.start_time || ''})
-                        </div>
-                    </div>`;
-            }
-            return `
-                <div class="alert alert-primary d-flex align-items-center justify-content-between mb-2" role="alert">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-broadcast fs-5 me-3 flex-shrink-0 text-primary"></i>
-                        <div>
-                            <strong>Điểm danh đang mở!</strong>
-                            ${esc(s.subject)} – Lớp ${esc(s.classroom)}
-                            <span class="text-muted small ms-1">(${s.session_date} ${s.start_time || ''})</span>
-                        </div>
-                    </div>
-                    <a href="/student/checkin/${s.id}" class="btn btn-primary btn-sm ms-3 flex-shrink-0">
-                        <i class="bi bi-camera-fill"></i> Vào điểm danh
-                    </a>
-                </div>`;
-        }).join('');
-    }
-
-    // ── Helpers ────────────────────────────────────────────────────────────────
-
-    function statusBadge(s) {
-        const m = {present:'success',late:'warning',absent:'danger',excused:'info'};
-        const l = {present:'Có mặt',late:'Muộn',absent:'Vắng',excused:'Xin phép'};
-        return `<span class="badge bg-${m[s]||'secondary'}">${l[s]||s}</span>`;
-    }
-
-    function esc(t) { const d=document.createElement('div');d.textContent=t||'';return d.innerHTML; }
-</script>
+<script src="{{ url_for('static', filename='js/modules/student/dashboard.js') }}"></script>
 {% endblock %}

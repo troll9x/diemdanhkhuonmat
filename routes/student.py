@@ -1,136 +1,247 @@
-"""Student-specific API routes: face registration, active sessions, authenticated check-in."""
+"""Student API routes — join class, face registration, check-in, logs."""
 import cv2
 import numpy as np
 import pickle
-from datetime import datetime
-from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from datetime import date, datetime
 
+from flask import Blueprint, jsonify, request, current_app
+from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from models import (
-    db, Student, FaceEmbedding, ClassSession, AttendanceRecord, ClassroomStudent
+    db, AppUser, AppClassroom, AppEnrollment,
+    AppStudentProfile, AppFaceEmbedding,
+    AttendanceSession, AppAttendanceRecord,
 )
-from utils.decorators import student_only
 from middleware.rate_limit import limiter
+from utils.geo import calculate_distance_meters
 
 student_api_bp = Blueprint('student_api', __name__)
 
-FACE_SIMILARITY_THRESHOLD = 0.45   # ArcFace cross-pose similarity is lower than same-pose
+FACE_SIMILARITY_THRESHOLD = 0.45
 
-# buffalo_sc has SCRFD (detection) + ArcFaceONNX (recognition) only.
-# It does NOT include a pose estimation model, so face.pose is always None.
-# We fall back to 5-point keypoint geometry for pose classification.
-#
-# Keypoints from SCRFD (image coordinates):
-#   kps[0] = left eye (leftmost in image)
-#   kps[1] = right eye (rightmost in image)
-#   kps[2] = nose tip
-#
-# Pose indicator: ratio = (nose_x - eye_mid_x) / eye_separation
-#   ratio ≈  0   → front
-#   ratio > +R   → one lateral direction
-#   ratio < -R   → other lateral direction
-_KPS_YAW_RATIO_THRESH = 0.12   # ~18–22 degree turn
+# Keypoint-based pose classification (same logic as before)
+_KPS_YAW_RATIO_THRESH = 0.12
 
 POSE_LABELS = {
-    'front':   'Nhìn thẳng',
-    'left':    'Quay sang trái',
-    'right':   'Quay sang phải',
+    'front': 'Nhìn thẳng',
+    'left': 'Quay sang trái',
+    'right': 'Quay sang phải',
     'unknown': 'Không xác định',
 }
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _require_student():
+    claims = get_jwt()
+    if claims.get('role') != 'student':
+        return None, (jsonify({'error': 'Chỉ sinh viên mới có quyền truy cập'}), 403)
+    user = AppUser.query.get(int(get_jwt_identity()))
+    if not user or not user.is_active:
+        return None, (jsonify({'error': 'Người dùng không tồn tại'}), 403)
+    return user, None
+
+
 def _classify_pose(face):
-    """
-    Classify face orientation.
-    Priority:
-      1. face.pose euler angles  (available with buffalo_l, etc.)
-      2. face.kps 5-point geometry (works with buffalo_sc SCRFD)
-      3. 'unknown' fallback — caller treats this as "accept any pose"
-    Returns (pose_name, pitch_deg, yaw_deg).
-    """
-    # --- Method 1: euler angles (buffalo_l / models with pose model) ---
     try:
         if face.pose is not None:
             pitch = float(face.pose[0])
-            yaw   = float(face.pose[1])
+            yaw = float(face.pose[1])
             if abs(yaw) < 20 and abs(pitch) < 20:
                 return 'front', pitch, yaw
-            if yaw < -20:
-                return 'left',  pitch, yaw
-            if yaw >  20:
-                return 'right', pitch, yaw
-            return 'unknown', pitch, yaw
+            return ('left' if yaw < -20 else 'right'), pitch, yaw
     except Exception:
         pass
 
-    # --- Method 2: 5-keypoint geometry (buffalo_sc SCRFD) ---
     try:
         kps = face.kps
         if kps is not None and len(kps) >= 3:
-            lx  = float(kps[0][0])          # left eye x  (image left)
-            rx  = float(kps[1][0])          # right eye x (image right)
-            nx  = float(kps[2][0])          # nose x
+            lx = float(kps[0][0])
+            rx = float(kps[1][0])
+            nx = float(kps[2][0])
             sep = abs(rx - lx)
             if sep > 1.0:
                 ratio = (nx - (lx + rx) / 2.0) / sep
                 yaw_approx = ratio * 90.0
-                if ratio >  _KPS_YAW_RATIO_THRESH:
-                    return 'left',  0.0, yaw_approx
+                if ratio > _KPS_YAW_RATIO_THRESH:
+                    return 'left', 0.0, yaw_approx
                 if ratio < -_KPS_YAW_RATIO_THRESH:
                     return 'right', 0.0, yaw_approx
                 return 'front', 0.0, yaw_approx
     except Exception:
         pass
 
-    # --- Fallback: pose undetermined → accept any required pose ---
     return 'unknown', 0.0, 0.0
 
 
-@student_api_bp.route('/me', methods=['GET'])
-@jwt_required()
-@student_only
-def get_student_me():
-    """Return current student profile with face registration status."""
-    student_id = int(get_jwt_identity())
-    student = Student.query.get(student_id)
-    if not student:
-        return jsonify({'error': 'Không tìm thấy sinh viên'}), 404
+# ---------------------------------------------------------------------------
+# GET /api/student/dashboard
+# ---------------------------------------------------------------------------
 
-    embedding_count = FaceEmbedding.query.filter_by(
-        student_id=student.id, is_active=True
-    ).count()
+@student_api_bp.route('/dashboard', methods=['GET'])
+@jwt_required()
+def student_dashboard():
+    student, err = _require_student()
+    if err:
+        return err
+
+    profile = student.student_profile
+    enrollments = student.enrollments.filter_by(is_active=True).all()
+
+    # Find open sessions for enrolled classes
+    enrolled_cls_ids = [e.classroom_id for e in enrollments]
+    open_sessions = []
+    if enrolled_cls_ids:
+        sessions = AttendanceSession.query.filter(
+            AttendanceSession.classroom_id.in_(enrolled_cls_ids),
+            AttendanceSession.status == 'open',
+            AttendanceSession.session_date == date.today(),
+        ).all()
+        for s in sessions:
+            already = AppAttendanceRecord.query.filter_by(
+                session_id=s.id, student_id=student.id
+            ).first()
+            open_sessions.append({
+                'session_id': s.id,
+                'classroom_id': s.classroom_id,
+                'classroom_name': s.classroom.name if s.classroom else '—',
+                'already_checked_in': already is not None,
+            })
 
     return jsonify({
         'id': student.id,
-        'student_code': student.student_code,
         'full_name': student.full_name,
         'email': student.email,
-        'face_registered': student.face_registered,
-        'embedding_count': embedding_count,
-        'department': student.department.name if student.department else None,
+        'student_code': profile.student_code if profile else None,
+        'face_registered': profile.face_registered if profile else False,
+        'total_classes': len(enrollments),
+        'open_sessions': open_sessions,
     }), 200
 
+
+# ---------------------------------------------------------------------------
+# POST /api/student/join-class
+# ---------------------------------------------------------------------------
+
+@student_api_bp.route('/join-class', methods=['POST'])
+@jwt_required()
+def join_class():
+    student, err = _require_student()
+    if err:
+        return err
+
+    # Require face registration before joining a class
+    profile = student.student_profile
+    if not profile or not profile.face_registered:
+        return jsonify({
+            'error': 'Bạn cần đăng ký khuôn mặt trước khi tham gia lớp học',
+            'redirect': '/student/face-registration',
+        }), 403
+
+    data = request.get_json() or {}
+    class_code = (data.get('class_code') or '').strip().upper()
+    if not class_code:
+        return jsonify({'error': 'Vui lòng nhập mã lớp'}), 400
+
+    cls = AppClassroom.query.filter_by(class_code=class_code, is_active=True).first()
+    if not cls:
+        return jsonify({'error': 'Mã lớp không tồn tại hoặc đã bị đóng'}), 404
+
+    existing = AppEnrollment.query.filter_by(
+        classroom_id=cls.id, student_id=student.id
+    ).first()
+    if existing:
+        if existing.is_active:
+            return jsonify({'error': 'Bạn đã tham gia lớp này rồi'}), 409
+        existing.is_active = True
+        db.session.commit()
+        return jsonify({'message': 'Đã tham gia lại lớp thành công'}), 200
+
+    # Update student_code if provided
+    student_code = (data.get('student_code') or '').strip() or None
+    if student_code and student.student_profile:
+        if not student.student_profile.student_code:
+            student.student_profile.student_code = student_code
+
+    enr = AppEnrollment(
+        classroom_id=cls.id,
+        student_id=student.id,
+        student_code=student_code,
+        is_active=True,
+    )
+    db.session.add(enr)
+    db.session.commit()
+
+    return jsonify({
+        'message': f'Đã tham gia lớp "{cls.name}" thành công',
+        'classroom': {
+            'id': cls.id,
+            'name': cls.name,
+            'class_code': cls.class_code,
+        },
+    }), 201
+
+
+# ---------------------------------------------------------------------------
+# GET /api/student/classes
+# ---------------------------------------------------------------------------
+
+@student_api_bp.route('/classes', methods=['GET'])
+@jwt_required()
+def get_my_classes():
+    student, err = _require_student()
+    if err:
+        return err
+
+    enrollments = student.enrollments.filter_by(is_active=True).all()
+    result = []
+    for enr in enrollments:
+        cls = enr.classroom
+        if not cls:
+            continue
+        today_session = AttendanceSession.query.filter_by(
+            classroom_id=cls.id, session_date=date.today()
+        ).first()
+        already = None
+        if today_session:
+            already = AppAttendanceRecord.query.filter_by(
+                session_id=today_session.id, student_id=student.id
+            ).first()
+        result.append({
+            'id': cls.id,
+            'name': cls.name,
+            'class_code': cls.class_code,
+            'teacher_name': cls.teacher.full_name if cls.teacher else '—',
+            'joined_at': enr.joined_at.isoformat(),
+            'today_session': {
+                'id': today_session.id,
+                'status': today_session.status,
+                'already_checked_in': already is not None,
+            } if today_session else None,
+        })
+    return jsonify({'classes': result}), 200
+
+
+# ---------------------------------------------------------------------------
+# POST /api/student/register-face
+# ---------------------------------------------------------------------------
 
 @student_api_bp.route('/register-face', methods=['POST'])
 @limiter.exempt
 @jwt_required()
-@student_only
 def register_face():
     """
-    Register one webcam frame as a face embedding.
-    Accepts multipart/form-data:
-      - image: JPEG file
-      - required_pose: 'front' | 'left' | 'right' | 'any'  (default 'any')
-    Returns pose_detected and pose_match so the frontend can advance steps.
+    Store a single webcam frame as a face embedding.
+    Form-data: image (file), required_pose (any|front|left|right).
     """
     from face_utils import decode_image, yolo_has_face, _get_insight
 
-    student_id = int(get_jwt_identity())
-    student = Student.query.get(student_id)
-    if not student:
-        return jsonify({'error': 'Không tìm thấy sinh viên'}), 404
+    student, err = _require_student()
+    if err:
+        return err
 
-    required_pose = request.form.get('required_pose', 'any')  # any/front/left/right
+    required_pose = request.form.get('required_pose', 'any')
 
     image_file = request.files.get('image')
     if not image_file:
@@ -144,19 +255,17 @@ def register_face():
     if frame is None:
         return jsonify({'error': 'Không thể đọc ảnh'}), 400
 
-    # Quick YOLO face gate
     if not yolo_has_face(frame):
         return jsonify({
             'status': 'no_face',
-            'message': 'Không phát hiện khuôn mặt. Hãy nhìn thẳng vào camera và đảm bảo ánh sáng đủ',
+            'message': 'Không phát hiện khuôn mặt. Hãy nhìn thẳng vào camera',
             'pose_detected': None,
             'pose_match': False,
         }), 200
 
-    # InsightFace
-    app = _get_insight()
+    insight_app = _get_insight()
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    faces = app.get(rgb)
+    faces = insight_app.get(rgb)
     if not faces:
         return jsonify({
             'status': 'no_face',
@@ -166,22 +275,15 @@ def register_face():
         }), 200
 
     face = max(faces, key=lambda f: f.det_score)
-
-    # Classify pose BEFORE anti-spoof so we can return pose info even on wrong angle
     pose_name, pitch, yaw = _classify_pose(face)
 
-    # Check required pose.
-    # 'unknown' means pose model unavailable (buffalo_sc) → accept any frame
-    # so the system degrades gracefully to the original 30-frame behavior.
     pose_match = (
         required_pose == 'any'
         or pose_name == required_pose
         or pose_name == 'unknown'
     )
     if not pose_match:
-        embedding_count = FaceEmbedding.query.filter_by(
-            student_id=student.id, is_active=True
-        ).count()
+        count = AppFaceEmbedding.query.filter_by(user_id=student.id, is_active=True).count()
         return jsonify({
             'status': 'wrong_pose',
             'message': (
@@ -190,10 +292,10 @@ def register_face():
             ),
             'pose_detected': pose_name,
             'pose_match': False,
-            'embedding_count': embedding_count,
+            'embedding_count': count,
         }), 200
 
-    # Anti-spoofing (gracefully skipped if models not loaded)
+    # Anti-spoofing
     try:
         from antispoof_utils import check_liveness
         is_live, _ = check_liveness(frame, face.bbox)
@@ -209,24 +311,27 @@ def register_face():
 
     embedding = face.normed_embedding.astype(np.float32)
 
-    face_emb = FaceEmbedding(
-        student_id=student.id,
+    face_emb = AppFaceEmbedding(
+        user_id=student.id,
         embedding_vector=pickle.dumps(embedding),
-        quality_score=float(face.det_score),
         is_active=True,
     )
     db.session.add(face_emb)
-    student.face_registered = True
+
+    # Update profile
+    if student.student_profile:
+        student.student_profile.face_registered = True
+    else:
+        profile = AppStudentProfile(user_id=student.id, face_registered=True)
+        db.session.add(profile)
+
     db.session.commit()
 
-    embedding_count = FaceEmbedding.query.filter_by(
-        student_id=student.id, is_active=True
-    ).count()
-
+    count = AppFaceEmbedding.query.filter_by(user_id=student.id, is_active=True).count()
     return jsonify({
         'status': 'success',
-        'message': f'Đã lưu: {POSE_LABELS[pose_name]} (frame #{embedding_count})',
-        'embedding_count': embedding_count,
+        'message': f'Đã lưu: {POSE_LABELS[pose_name]} (frame #{count})',
+        'embedding_count': count,
         'face_registered': True,
         'pose_detected': pose_name,
         'pose_match': True,
@@ -235,54 +340,47 @@ def register_face():
     }), 200
 
 
+# ---------------------------------------------------------------------------
+# POST /api/student/complete-registration
+# ---------------------------------------------------------------------------
+
 @student_api_bp.route('/complete-registration', methods=['POST'])
 @limiter.exempt
 @jwt_required()
-@student_only
 def complete_registration():
-    """
-    Called when student finishes all 3 pose steps.
-    Automatically retrains the SVM on ALL students' FaceEmbedding data
-    so recognize/check-in can work immediately without admin action.
-    Mirrors what old retrain_from_db() did after register_user().
-    """
+    """Retrain SVM after face registration completes."""
     import pickle as _pickle
     from face_utils import retrain_svm, SVM_PATH
     from models import FaceModel
 
-    student_id = int(get_jwt_identity())
+    student, err = _require_student()
+    if err:
+        return err
 
-    # Ensure the student has enough embeddings
-    count = FaceEmbedding.query.filter_by(
-        student_id=student_id, is_active=True
-    ).count()
+    count = AppFaceEmbedding.query.filter_by(user_id=student.id, is_active=True).count()
     if count < 10:
-        return jsonify({
-            'error': f'Chưa đủ mẫu khuôn mặt ({count}/10). Hãy đăng ký thêm.'
-        }), 400
+        return jsonify({'error': f'Chưa đủ mẫu ({count}/10). Hãy đăng ký thêm.'}), 400
 
-    # Load ALL active embeddings from ALL students
+    # Load all active embeddings from all AppUsers (students)
     rows = db.session.query(
-        FaceEmbedding.student_id, FaceEmbedding.embedding_vector
-    ).filter(FaceEmbedding.is_active == True).all()
+        AppFaceEmbedding.user_id, AppFaceEmbedding.embedding_vector
+    ).filter(AppFaceEmbedding.is_active == True).all()
 
-    embeddings_by_student = {}
-    for sid, emb_bytes in rows:
+    embeddings_by_user = {}
+    for uid, emb_bytes in rows:
         try:
             emb = _pickle.loads(emb_bytes)
-            embeddings_by_student.setdefault(sid, []).append(emb)
+            embeddings_by_user.setdefault(uid, []).append(emb)
         except Exception:
             continue
 
-    if not embeddings_by_student:
+    if not embeddings_by_user:
         return jsonify({'error': 'Không có dữ liệu embedding nào'}), 400
 
-    # Retrain SVM (same as admin training route)
-    success = retrain_svm(embeddings_by_student)
+    success = retrain_svm(embeddings_by_user)
     if not success:
         return jsonify({'error': 'Huấn luyện mô hình thất bại'}), 500
 
-    # Record new FaceModel (deactivate old ones)
     FaceModel.query.update({'is_active': False})
     version = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     new_model = FaceModel(
@@ -293,120 +391,135 @@ def complete_registration():
         is_active=True,
         trained_at=datetime.utcnow(),
         training_stats={
-            'num_students': len(embeddings_by_student),
-            'num_embeddings': sum(len(v) for v in embeddings_by_student.values()),
+            'num_students': len(embeddings_by_user),
+            'num_embeddings': sum(len(v) for v in embeddings_by_user.values()),
             'trigger': 'student_registration_complete',
-        }
+        },
     )
     db.session.add(new_model)
     db.session.commit()
 
     return jsonify({
         'status': 'success',
-        'message': 'Mô hình nhận diện đã được cập nhật',
-        'students_in_model': len(embeddings_by_student),
-        'total_embeddings': sum(len(v) for v in embeddings_by_student.values()),
+        'message': 'Đăng ký khuôn mặt hoàn tất',
+        'students_in_model': len(embeddings_by_user),
+        'total_embeddings': sum(len(v) for v in embeddings_by_user.values()),
     }), 200
 
 
-@student_api_bp.route('/active-sessions', methods=['GET'])
-@limiter.exempt
+# ---------------------------------------------------------------------------
+# GET /api/student/classes/<class_id>/active-session
+# ---------------------------------------------------------------------------
+
+@student_api_bp.route('/classes/<int:class_id>/active-session', methods=['GET'])
 @jwt_required()
-@student_only
-def get_active_sessions():
-    """
-    Return currently active (ongoing) sessions for this student's enrolled classes.
-    Polled every 5 seconds by the student dashboard.
-    """
-    student_id = int(get_jwt_identity())
+def get_active_session(class_id):
+    student, err = _require_student()
+    if err:
+        return err
 
-    enrolled_classroom_ids = [
-        cs.classroom_id
-        for cs in ClassroomStudent.query.filter_by(student_id=student_id).all()
-    ]
+    # Must be enrolled
+    enr = AppEnrollment.query.filter_by(
+        classroom_id=class_id, student_id=student.id, is_active=True
+    ).first()
+    if not enr:
+        return jsonify({'error': 'Bạn không thuộc lớp học này'}), 403
 
-    if not enrolled_classroom_ids:
-        return jsonify({'sessions': []}), 200
+    session = AttendanceSession.query.filter_by(
+        classroom_id=class_id,
+        session_date=date.today(),
+        status='open',
+    ).first()
 
-    sessions = ClassSession.query.filter(
-        ClassSession.classroom_id.in_(enrolled_classroom_ids),
-        ClassSession.status == 'ongoing'
-    ).all()
+    if not session:
+        return jsonify({'session': None}), 200
 
-    result = []
-    for s in sessions:
-        already_attended = AttendanceRecord.query.filter_by(
-            session_id=s.id, student_id=student_id
-        ).first() is not None
+    already = AppAttendanceRecord.query.filter_by(
+        session_id=session.id, student_id=student.id
+    ).first()
 
-        result.append({
-            'id': s.id,
-            'classroom': s.classroom.class_name if s.classroom else '—',
-            'subject': s.subject.subject_name if s.subject else '—',
-            'session_date': s.session_date.isoformat(),
-            'start_time': s.start_time.strftime('%H:%M') if s.start_time else None,
-            'already_attended': already_attended,
-        })
+    return jsonify({
+        'session': {
+            'id': session.id,
+            'status': session.status,
+            'session_date': session.session_date.isoformat(),
+            'started_at': session.started_at.isoformat(),
+            'already_checked_in': already is not None,
+        },
+    }), 200
 
-    return jsonify({'sessions': result}), 200
 
+# ---------------------------------------------------------------------------
+# POST /api/student/sessions/<session_id>/check-in
+# ---------------------------------------------------------------------------
 
 @student_api_bp.route('/sessions/<int:session_id>/check-in', methods=['POST'])
 @jwt_required()
-@student_only
-def student_face_checkin(session_id):
+def student_checkin(session_id):
     """
-    Authenticated student face check-in for an ongoing session.
-    Accepts multipart/form-data with 'image' file.
-    Compares webcam embedding against stored embeddings via cosine similarity.
+    Face + GPS check-in.
+    Form-data: image (file), latitude (float), longitude (float).
     """
     from face_utils import decode_image, yolo_has_face, _get_insight
 
-    student_id = int(get_jwt_identity())
-    student = Student.query.get(student_id)
-    if not student:
-        return jsonify({'error': 'Không tìm thấy sinh viên'}), 404
+    student, err = _require_student()
+    if err:
+        return err
 
-    # Validate session
-    session = ClassSession.query.get(session_id)
+    session = AttendanceSession.query.get(session_id)
     if not session:
-        return jsonify({'status': 'error', 'message': 'Buổi học không tồn tại'}), 404
+        return jsonify({'status': 'error', 'message': 'Phiên điểm danh không tồn tại'}), 404
 
-    if session.status == 'scheduled':
-        return jsonify({'status': 'session_closed', 'message': 'Giảng viên chưa mở điểm danh'}), 400
-    if session.status in ('completed', 'cancelled'):
-        labels = {'completed': 'đã kết thúc', 'cancelled': 'đã hủy'}
-        return jsonify({'status': 'session_closed', 'message': f'Phiên điểm danh {labels[session.status]}'}), 400
+    if session.status == 'closed':
+        return jsonify({'status': 'session_closed', 'message': 'Phiên điểm danh đã kết thúc'}), 400
 
-    # Check enrollment
-    enrolled = ClassroomStudent.query.filter_by(
-        classroom_id=session.classroom_id, student_id=student_id
+    # Enrollment check
+    enr = AppEnrollment.query.filter_by(
+        classroom_id=session.classroom_id, student_id=student.id, is_active=True
     ).first()
-    if not enrolled:
+    if not enr:
         return jsonify({'status': 'not_enrolled', 'message': 'Bạn không thuộc lớp học này'}), 403
 
-    # Check duplicate
-    existing = AttendanceRecord.query.filter_by(
-        session_id=session_id, student_id=student_id
+    # Duplicate check
+    existing = AppAttendanceRecord.query.filter_by(
+        session_id=session_id, student_id=student.id
     ).first()
     if existing:
         return jsonify({
             'status': 'already_checked_in',
-            'message': 'Bạn đã điểm danh buổi học này rồi',
-            'attendance_time': existing.attendance_time.strftime('%H:%M:%S') if existing.attendance_time else None,
+            'message': 'Bạn đã điểm danh rồi',
+            'checkin_time': existing.checkin_time.strftime('%H:%M:%S'),
         }), 200
 
-    # Check student has face data
-    stored_embeddings = FaceEmbedding.query.filter_by(
-        student_id=student_id, is_active=True
+    # Face data check
+    profile = student.student_profile
+    if not profile or not profile.face_registered:
+        return jsonify({
+            'status': 'no_face',
+            'message': 'Bạn chưa đăng ký khuôn mặt. Vui lòng đăng ký trước',
+        }), 400
+
+    stored_embeddings = AppFaceEmbedding.query.filter_by(
+        user_id=student.id, is_active=True
     ).all()
     if not stored_embeddings:
         return jsonify({
             'status': 'no_face',
-            'message': 'Bạn chưa đăng ký khuôn mặt. Hãy đăng ký khuôn mặt trước khi điểm danh'
+            'message': 'Không tìm thấy dữ liệu khuôn mặt. Vui lòng đăng ký lại',
         }), 400
 
-    # Read image
+    # GPS
+    lat_str = request.form.get('latitude')
+    lon_str = request.form.get('longitude')
+    if lat_str is None or lon_str is None:
+        return jsonify({'error': 'Cần cung cấp vị trí GPS'}), 400
+    try:
+        student_lat = float(lat_str)
+        student_lon = float(lon_str)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Vị trí GPS không hợp lệ'}), 400
+
+    # Image
     image_file = request.files.get('image')
     if not image_file:
         return jsonify({'error': 'Không có ảnh được gửi'}), 400
@@ -417,15 +530,11 @@ def student_face_checkin(session_id):
         return jsonify({'error': 'Không thể đọc ảnh'}), 400
 
     if not yolo_has_face(frame):
-        return jsonify({
-            'status': 'no_face',
-            'message': 'Không phát hiện khuôn mặt. Hãy nhìn thẳng vào camera'
-        }), 200
+        return jsonify({'status': 'no_face', 'message': 'Không phát hiện khuôn mặt'}), 200
 
-    # InsightFace embedding
-    app = _get_insight()
+    insight_app = _get_insight()
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    faces = app.get(rgb)
+    faces = insight_app.get(rgb)
     if not faces:
         return jsonify({'status': 'no_face', 'message': 'Không phát hiện khuôn mặt'}), 200
 
@@ -438,14 +547,14 @@ def student_face_checkin(session_id):
         if not is_live:
             return jsonify({
                 'status': 'spoof',
-                'message': 'Phát hiện ảnh giả mạo. Vui lòng dùng khuôn mặt thật trước camera'
+                'message': 'Phát hiện ảnh giả mạo. Vui lòng dùng khuôn mặt thật',
             }), 200
     except Exception:
         pass
 
     query_emb = face.normed_embedding.astype(np.float32)
 
-    # Cosine similarity against all stored embeddings
+    # Cosine similarity
     best_sim = 0.0
     for fe in stored_embeddings:
         try:
@@ -459,29 +568,177 @@ def student_face_checkin(session_id):
     if best_sim < FACE_SIMILARITY_THRESHOLD:
         return jsonify({
             'status': 'mismatch',
-            'message': 'Khuôn mặt không khớp với dữ liệu đã đăng ký. Vui lòng thử lại hoặc liên hệ giảng viên',
+            'message': 'Khuôn mặt không khớp. Vui lòng thử lại hoặc liên hệ giảng viên',
             'confidence': round(best_sim * 100, 1),
         }), 200
 
-    # Record attendance
-    record = AttendanceRecord(
+    # GPS distance check
+    teacher_lat = session.teacher_latitude
+    teacher_lon = session.teacher_longitude
+    distance = None
+    reject_reason = None
+
+    if teacher_lat is not None and teacher_lon is not None:
+        distance = calculate_distance_meters(student_lat, student_lon, teacher_lat, teacher_lon)
+        radius = float(current_app.config.get('ATTENDANCE_RADIUS_METERS', 100))
+        if distance > radius:
+            record = AppAttendanceRecord(
+                session_id=session_id,
+                classroom_id=session.classroom_id,
+                student_id=student.id,
+                checkin_time=datetime.utcnow(),
+                student_latitude=student_lat,
+                student_longitude=student_lon,
+                distance_meters=round(distance, 2),
+                face_confidence=best_sim,
+                status='rejected',
+                reject_reason=f'Quá xa giảng viên ({round(distance, 0)}m > {radius}m)',
+            )
+            db.session.add(record)
+            db.session.commit()
+            return jsonify({
+                'status': 'too_far',
+                'message': f'Bạn đang ở quá xa giảng viên ({round(distance, 0)} m). Phạm vi cho phép: {radius} m',
+                'distance_meters': round(distance, 1),
+            }), 200
+
+    # Calculate late status (only for 'start' sessions)
+    now = datetime.utcnow()
+    is_late = False
+    if session.session_type == 'start':
+        from datetime import timedelta
+        cutoff = session.started_at + timedelta(minutes=session.late_after_minutes or 15)
+        is_late = now > cutoff
+
+    # Success
+    record = AppAttendanceRecord(
         session_id=session_id,
-        student_id=student_id,
         classroom_id=session.classroom_id,
-        subject_id=session.subject_id,
-        attendance_time=datetime.utcnow(),
+        student_id=student.id,
+        checkin_time=now,
+        student_latitude=student_lat,
+        student_longitude=student_lon,
+        distance_meters=round(distance, 2) if distance is not None else None,
+        face_confidence=best_sim,
         status='present',
-        confidence_score=best_sim,
-        ip_address=request.remote_addr,
-        user_agent=(request.headers.get('User-Agent') or '')[:255],
+        is_late=is_late,
     )
     db.session.add(record)
     db.session.commit()
 
+    late_msg = ' (Muộn)' if is_late else ''
     return jsonify({
         'status': 'success',
-        'message': 'Điểm danh thành công!',
+        'message': f'Điểm danh thành công{late_msg}!',
         'student_name': student.full_name,
-        'attendance_time': record.attendance_time.strftime('%H:%M:%S'),
+        'checkin_time': record.checkin_time.strftime('%H:%M:%S'),
+        'is_late': is_late,
         'confidence': round(best_sim * 100, 1),
+        'distance_meters': round(distance, 1) if distance is not None else None,
     }), 201
+
+
+# ---------------------------------------------------------------------------
+# GET /api/student/attendance-logs
+# ---------------------------------------------------------------------------
+
+@student_api_bp.route('/attendance-logs', methods=['GET'])
+@jwt_required()
+def get_attendance_logs():
+    student, err = _require_student()
+    if err:
+        return err
+
+    records = (
+        AppAttendanceRecord.query
+        .filter_by(student_id=student.id)
+        .order_by(AppAttendanceRecord.checkin_time.desc())
+        .all()
+    )
+
+    SESSION_LABEL = {'start': 'Đầu giờ', 'end': 'Cuối giờ'}
+    logs = []
+    for r in records:
+        sess = r.session
+        cls = r.classroom_ref
+        logs.append({
+            'id': r.id,
+            'classroom_name': cls.name if cls else '—',
+            'session_date': sess.session_date.isoformat() if sess else None,
+            'session_type': sess.session_type if sess else None,
+            'session_type_label': SESSION_LABEL.get(sess.session_type, sess.session_type) if sess else None,
+            'checkin_time': r.checkin_time.strftime('%H:%M:%S'),
+            'status': r.status,
+            'is_late': r.is_late,
+            'distance_meters': round(r.distance_meters, 1) if r.distance_meters else None,
+            'confidence': round(r.face_confidence * 100, 1) if r.face_confidence else None,
+            'reject_reason': r.reject_reason,
+        })
+
+    return jsonify({'logs': logs, 'total': len(logs)}), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /api/student/active-sessions  — kept for backward compat
+# ---------------------------------------------------------------------------
+
+@student_api_bp.route('/active-sessions', methods=['GET'])
+@limiter.exempt
+@jwt_required()
+def get_active_sessions_legacy():
+    student, err = _require_student()
+    if err:
+        return err
+
+    enrolled_ids = [
+        e.classroom_id for e in student.enrollments.filter_by(is_active=True).all()
+    ]
+    if not enrolled_ids:
+        return jsonify({'sessions': []}), 200
+
+    sessions = AttendanceSession.query.filter(
+        AttendanceSession.classroom_id.in_(enrolled_ids),
+        AttendanceSession.status == 'open',
+        AttendanceSession.session_date == date.today(),
+    ).all()
+
+    SESSION_LABEL = {'start': 'Đầu giờ', 'end': 'Cuối giờ'}
+    result = []
+    for s in sessions:
+        already = AppAttendanceRecord.query.filter_by(
+            session_id=s.id, student_id=student.id
+        ).first()
+        result.append({
+            'id': s.id,
+            'classroom': s.classroom.name if s.classroom else '—',
+            'session_date': s.session_date.isoformat(),
+            'session_type': s.session_type,
+            'session_type_label': SESSION_LABEL.get(s.session_type, s.session_type),
+            'already_attended': already is not None,
+        })
+
+    return jsonify({'sessions': result}), 200
+
+
+# ---------------------------------------------------------------------------
+# GET /api/student/me  — kept for backward compat
+# ---------------------------------------------------------------------------
+
+@student_api_bp.route('/me', methods=['GET'])
+@jwt_required()
+def get_student_me():
+    student, err = _require_student()
+    if err:
+        return err
+
+    profile = student.student_profile
+    count = AppFaceEmbedding.query.filter_by(user_id=student.id, is_active=True).count()
+
+    return jsonify({
+        'id': student.id,
+        'full_name': student.full_name,
+        'email': student.email,
+        'student_code': profile.student_code if profile else None,
+        'face_registered': profile.face_registered if profile else False,
+        'embedding_count': count,
+    }), 200

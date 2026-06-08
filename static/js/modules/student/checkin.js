@@ -1,228 +1,157 @@
-/**
- * Student Authenticated Face Check-in Module
- * Captures one webcam frame and submits to /api/student/sessions/:id/check-in.
- */
+// Student Check-in JS
+let selectedSessionId = PAGE_SESSION_ID || null;
+let webcamStream = null;
 
-let stream = null;
+const STATUS_UI = {
+    success:          { cls: 'success', icon: 'bi-check-circle-fill',  text: 'Điểm danh thành công' },
+    success_late:     { cls: 'warning', icon: 'bi-clock-fill',         text: 'Điểm danh thành công — Muộn giờ' },
+    already_checked_in: { cls: 'info',  icon: 'bi-info-circle-fill',   text: 'Bạn đã điểm danh rồi' },
+    mismatch:         { cls: 'danger',  icon: 'bi-x-circle-fill',      text: 'Khuôn mặt không khớp' },
+    no_face:          { cls: 'warning', icon: 'bi-camera-video-off',   text: 'Không phát hiện khuôn mặt' },
+    too_far:          { cls: 'danger',  icon: 'bi-geo-alt-fill',       text: 'Quá xa giảng viên' },
+    session_closed:   { cls: 'secondary',icon: 'bi-stop-circle',       text: 'Phiên đã kết thúc' },
+    spoof:            { cls: 'danger',  icon: 'bi-shield-x',           text: 'Phát hiện giả mạo' },
+    not_enrolled:     { cls: 'danger',  icon: 'bi-person-x',           text: 'Không thuộc lớp này' },
+};
 
-const video = document.getElementById('videoEl');
-const canvas = document.getElementById('captureCanvas');
-const cameraWrapper = document.getElementById('cameraWrapper');
-const cameraPlaceholder = document.getElementById('cameraPlaceholder');
-const processingSpinner = document.getElementById('processingSpinner');
-const resultBox = document.getElementById('resultBox');
-const resultIcon = document.getElementById('resultIcon');
-const resultTitle = document.getElementById('resultTitle');
-const resultMessage = document.getElementById('resultMessage');
-const resultDetail = document.getElementById('resultDetail');
-const btnCheckin = document.getElementById('btnCheckin');
-const btnRetry = document.getElementById('btnRetry');
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function captureFrameAsBlob(quality = 0.85) {
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    return new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
-}
-
-function showResult(status, title, message, detail = '') {
-    cameraWrapper.classList.add('d-none');
-    processingSpinner.classList.add('d-none');
-    resultBox.classList.remove('d-none');
-
-    const icons = {
-        success: '<i class="bi bi-check-circle-fill text-success"></i>',
-        error: '<i class="bi bi-x-circle-fill text-danger"></i>',
-        warning: '<i class="bi bi-exclamation-circle-fill text-warning"></i>',
-        info: '<i class="bi bi-info-circle-fill text-info"></i>',
-    };
-    resultIcon.innerHTML = icons[status] || icons.info;
-    resultTitle.textContent = title;
-    resultMessage.textContent = message;
-    resultDetail.textContent = detail;
-
-    btnCheckin.classList.add('d-none');
-    btnRetry.classList.remove('d-none');
-}
-
-function resetUI() {
-    resultBox.classList.add('d-none');
-    processingSpinner.classList.add('d-none');
-    btnRetry.classList.add('d-none');
-    btnCheckin.classList.remove('d-none');
-}
-
-// ── Session Info ───────────────────────────────────────────────────────────────
-
-async function loadSessionInfo() {
+async function loadSessions() {
+    if (selectedSessionId) {
+        showCheckinPanel(selectedSessionId);
+        return;
+    }
+    const list = document.getElementById('sessionList');
     try {
-        const res = await fetch(`/api/class-sessions/${SESSION_ID}`);
-        if (!res.ok) throw new Error('Session not found');
-        const s = await res.json();
-
-        document.getElementById('sessionLoading').classList.add('d-none');
-        document.getElementById('sessionInfo').classList.remove('d-none');
-
-        document.getElementById('sessClassroom').textContent = s.classroom_name || '—';
-        document.getElementById('sessSubject').textContent = s.subject_name || '—';
-        document.getElementById('sessDate').textContent = s.session_date || '—';
-        document.getElementById('sessTime').textContent =
-            (s.start_time || '').substring(0, 5) + ' – ' + (s.end_time || '').substring(0, 5);
-
-        const statusMap = { scheduled: 'Chưa bắt đầu', ongoing: 'Đang điểm danh', completed: 'Đã kết thúc', cancelled: 'Đã hủy' };
-        const colorMap = { scheduled: 'secondary', ongoing: 'success', completed: 'primary', cancelled: 'danger' };
-        const st = s.status || 'unknown';
-        document.getElementById('sessStatus').innerHTML =
-            `<span class="badge bg-${colorMap[st] || 'secondary'}">${statusMap[st] || st}</span>`;
-
-        if (s.status !== 'ongoing') {
-            btnCheckin.disabled = true;
-            btnCheckin.innerHTML = '<i class="bi bi-lock"></i> Phiên điểm danh chưa mở';
-            btnCheckin.className = 'btn btn-secondary btn-lg';
+        const data = await api.get('/student/active-sessions');
+        if (!data.sessions || data.sessions.length === 0) {
+            list.innerHTML =
+                '<div class="text-center py-4 text-muted">Không có phiên điểm danh nào đang mở.</div>';
+            return;
         }
-    } catch (err) {
-        document.getElementById('sessionLoading').classList.add('d-none');
-        document.getElementById('sessionError').classList.remove('d-none');
-        document.getElementById('sessionErrorMsg').textContent = 'Không thể tải thông tin buổi học: ' + err.message;
-        btnCheckin.disabled = true;
+        list.innerHTML = data.sessions.map(s => `
+            <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                <div>
+                    <strong>${escHtml(s.classroom)}</strong>
+                    <span class="badge bg-${s.session_type === 'start' ? 'primary' : 'info'} ms-1">
+                        ${s.session_type_label || s.session_type}
+                    </span>
+                    <small class="text-muted ms-2">${s.session_date}</small>
+                    ${s.already_attended
+                        ? '<span class="badge bg-success ms-2">Đã điểm danh</span>'
+                        : ''}
+                </div>
+                ${!s.already_attended
+                    ? `<button class="btn btn-sm btn-success" onclick="showCheckinPanel(${s.id}, '${escHtml(s.classroom)} — ${s.session_type_label || ''}')">
+                           <i class="bi bi-camera-video me-1"></i>Điểm danh
+                       </button>`
+                    : ''}
+            </div>`).join('');
+    } catch (e) {
+        list.innerHTML = `<div class="alert alert-danger">${e.message}</div>`;
     }
 }
 
-// ── Camera ─────────────────────────────────────────────────────────────────────
-
-async function startCamera() {
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
-        });
-        video.srcObject = stream;
-
-        // Wait for actual frame data (canplay > loadedmetadata)
-        await new Promise(resolve => {
-            if (video.readyState >= 3) { resolve(); return; }
-            video.addEventListener('canplay', resolve, { once: true });
-        });
-
-        cameraWrapper.classList.remove('d-none');
-        cameraPlaceholder.classList.add('d-none');
-
-        // Stabilization delay before capture
-        await new Promise(r => setTimeout(r, 500));
-        return true;
-    } catch (err) {
-        showResult('error', 'Không thể mở camera', err.message);
-        return false;
-    }
+function showCheckinPanel(sessionId, label) {
+    selectedSessionId = sessionId;
+    document.getElementById('sessionSelector').style.display = 'none';
+    document.getElementById('checkinPanel').style.display = '';
+    document.getElementById('checkinTitle').textContent = label || `Điểm danh — Phiên #${sessionId}`;
 }
 
-function stopCamera() {
-    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-    video.srcObject = null;
-    cameraWrapper.classList.add('d-none');
+function cancelCheckin() {
+    stopWebcam();
+    selectedSessionId = null;
+    document.getElementById('sessionSelector').style.display = '';
+    document.getElementById('checkinPanel').style.display = 'none';
+    document.getElementById('resultBox').style.display = 'none';
+    document.getElementById('checkinControls').style.display = '';
+    loadSessions();
 }
 
-// ── Check-in ───────────────────────────────────────────────────────────────────
-
-async function performCheckin() {
-    btnCheckin.classList.add('d-none');
-    processingSpinner.classList.remove('d-none');
-
-    // Allow a brief moment for webcam to stabilize
-    await new Promise(r => setTimeout(r, 400));
+async function startCheckin() {
+    const btn = document.getElementById('checkinBtn');
+    const sp  = document.getElementById('checkinSpinner');
+    btn.disabled = true;
+    sp.classList.remove('d-none');
+    showResult(null);
 
     try {
-        const blob = await captureFrameAsBlob();
-        stopCamera();
+        // 1. Get GPS
+        const pos = await new Promise((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 }));
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
 
-        const formData = new FormData();
-        formData.append('image', blob, 'frame.jpg');
+        // 2. Open webcam
+        const cam = document.getElementById('webcam');
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        cam.srcObject = webcamStream;
+        cam.classList.remove('d-none');
 
-        const token = auth.getToken();
-        const response = await fetch(`/api/student/sessions/${SESSION_ID}/check-in`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData
-        });
+        // Wait 1.5s for camera to stabilize
+        await new Promise(r => setTimeout(r, 1500));
 
-        const data = await response.json();
+        // 3. Capture frame
+        const canvas = document.createElement('canvas');
+        canvas.width  = cam.videoWidth  || 320;
+        canvas.height = cam.videoHeight || 240;
+        canvas.getContext('2d').drawImage(cam, 0, 0);
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
 
-        switch (data.status) {
-            case 'success':
-                showResult(
-                    'success',
-                    'Điểm danh thành công!',
-                    data.message,
-                    `Giờ điểm danh: ${data.attendance_time} | Độ chính xác: ${data.confidence}%`
-                );
-                break;
-            case 'already_checked_in':
-                showResult(
-                    'info',
-                    'Đã điểm danh rồi',
-                    data.message,
-                    data.attendance_time ? `Đã điểm lúc: ${data.attendance_time}` : ''
-                );
-                break;
-            case 'mismatch':
-                showResult(
-                    'error',
-                    'Khuôn mặt không khớp',
-                    data.message,
-                    data.confidence != null ? `Độ tương đồng: ${data.confidence}%` : ''
-                );
-                break;
-            case 'spoof':
-                showResult('error', 'Phát hiện gian lận', data.message);
-                break;
-            case 'no_face':
-                showResult('warning', 'Không phát hiện khuôn mặt', data.message);
-                break;
-            case 'session_closed':
-                showResult('warning', 'Phiên điểm danh đã đóng', data.message);
-                break;
-            case 'not_enrolled':
-                showResult('error', 'Không thuộc lớp này', data.message);
-                break;
-            default:
-                showResult('error', 'Lỗi điểm danh', data.message || data.error || 'Lỗi không xác định');
+        stopWebcam();
+
+        // 4. Submit
+        const fd = new FormData();
+        fd.append('image', blob, 'checkin.jpg');
+        fd.append('latitude', lat);
+        fd.append('longitude', lon);
+
+        const data = await api.studentCheckinV2(selectedSessionId, fd);
+        // Promote to warning-style if late
+        if (data.status === 'success' && data.is_late) data.status = 'success_late';
+        showResult(data);
+    } catch (e) {
+        if (e.code) {
+            showResult({ status: 'error', message: 'Không thể lấy GPS: ' + e.message });
+        } else {
+            showResult({ status: 'error', message: e.message });
         }
-    } catch (err) {
-        processingSpinner.classList.add('d-none');
-        showResult('error', 'Lỗi kết nối', 'Không thể kết nối tới máy chủ. Vui lòng thử lại.');
-        console.error('checkin error:', err);
+    } finally {
+        btn.disabled = false;
+        sp.classList.add('d-none');
     }
 }
 
-// ── Event Handlers ─────────────────────────────────────────────────────────────
+function showResult(data) {
+    const box = document.getElementById('resultBox');
+    if (!data) { box.style.display = 'none'; return; }
 
-btnCheckin.addEventListener('click', async () => {
-    const ok = await startCamera();
-    if (!ok) return;
+    const ui = STATUS_UI[data.status] || { cls: 'secondary', icon: 'bi-info-circle', text: data.status };
+    box.style.display = '';
+    box.innerHTML = `
+        <div class="alert alert-${ui.cls}">
+            <i class="bi ${ui.icon} me-2 fs-4"></i>
+            <strong>${ui.text}</strong><br>
+            ${data.message || ''}
+            ${data.confidence != null ? `<br><small>Độ tin cậy: ${data.confidence}%</small>` : ''}
+            ${data.distance_meters != null ? `<br><small>Khoảng cách: ${data.distance_meters} m</small>` : ''}
+        </div>
+        ${data.status === 'success'
+            ? '<a href="/student/logs" class="btn btn-sm btn-primary"><i class="bi bi-clock-history me-1"></i>Xem lịch sử</a>'
+            : '<button class="btn btn-sm btn-secondary" onclick="cancelCheckin()">Quay lại</button>'}`;
+    document.getElementById('checkinControls').style.display = data.status === 'success' ? 'none' : '';
+}
 
-    btnCheckin.innerHTML = '<i class="bi bi-camera-fill"></i> Chụp & Điểm danh';
-    btnCheckin.onclick = performCheckin;
-});
+function stopWebcam() {
+    if (webcamStream) {
+        webcamStream.getTracks().forEach(t => t.stop());
+        webcamStream = null;
+    }
+    document.getElementById('webcam').classList.add('d-none');
+}
 
-btnRetry.addEventListener('click', () => {
-    resetUI();
-    cameraPlaceholder.classList.remove('d-none');
-    cameraWrapper.classList.add('d-none');
-    // Re-enable button and restore original handler
-    btnCheckin.innerHTML = '<i class="bi bi-camera"></i> Mở camera và điểm danh';
-    btnCheckin.onclick = null;
-    btnCheckin.addEventListener('click', async () => {
-        const ok = await startCamera();
-        if (!ok) return;
-        btnCheckin.innerHTML = '<i class="bi bi-camera-fill"></i> Chụp & Điểm danh';
-        btnCheckin.onclick = performCheckin;
-    }, { once: true });
-});
+function escHtml(str) {
+    return String(str || '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
-// ── Init ───────────────────────────────────────────────────────────────────────
-
-document.addEventListener('DOMContentLoaded', () => {
-    loadSessionInfo();
-});
+loadSessions();

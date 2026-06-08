@@ -1,203 +1,111 @@
 {% extends "layouts/base.html" %}
-
-{% block title %}Đăng ký khuôn mặt - Smart Attendance{% endblock %}
+{% block title %}Đăng ký khuôn mặt — Bắt buộc{% endblock %}
 
 {% block extra_css %}
 <style>
-    .step-circle {
-        width: 38px; height: 38px;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center; justify-content: center;
-        font-weight: 700; font-size: 1rem;
-        transition: background-color .3s, color .3s;
-    }
-    .step-item { text-align: center; min-width: 80px; }
-    .step-item small { display: block; margin-top: 4px; font-size: 11px; color: #666; }
-
-    .pose-arrow {
-        font-size: 2.8rem;
-        transition: transform .4s ease;
-        display: inline-block;
-    }
-    .pose-arrow.animate-left  { animation: swayLeft  1.2s ease-in-out infinite; }
-    .pose-arrow.animate-right { animation: swayRight 1.2s ease-in-out infinite; }
-    .pose-arrow.animate-front { animation: pulse     1.2s ease-in-out infinite; }
-
-    @keyframes swayLeft  { 0%,100%{transform:translateX(0)}  50%{transform:translateX(-12px)} }
-    @keyframes swayRight { 0%,100%{transform:translateX(0)}  50%{transform:translateX(+12px)} }
-    @keyframes pulse     { 0%,100%{transform:scale(1)}        50%{transform:scale(1.15)} }
-
-    #videoEl { border-radius: 8px; transition: border-color .2s, box-shadow .2s; }
-    .ring-ok   { border: 3px solid #198754 !important; box-shadow: 0 0 0 3px #19875430; }
-    .ring-bad  { border: 3px solid #6c757d !important; }
-    .ring-warn { border: 3px solid #ffc107 !important; }
-
-    #thumbnailStrip img { border-radius: 4px; border: 2px solid #198754;
-                          width: 50px; height: 50px; object-fit: cover; }
+#videoWrap { position:relative; display:inline-block; }
+#webcam { width:100%; max-width:480px; border-radius:12px; transform:scaleX(-1); }
+#overlay {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.5); border-radius:12px; color:white; text-align:center;
+    padding:20px;
+}
+.step-card.done  { background:#d1fae5; border-color:#10b981; }
+.step-card.active{ background:#dbeafe; border-color:#3b82f6; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-7 col-lg-6">
+  <div class="col-md-7">
 
-        <!-- Header -->
-        <div class="d-flex align-items-center mb-4">
-            <a href="/student-dashboard" class="btn btn-outline-secondary btn-sm me-3">
-                <i class="bi bi-arrow-left"></i>
-            </a>
-            <div>
-                <h3 class="mb-0"><i class="bi bi-person-bounding-box text-primary"></i> Đăng ký khuôn mặt</h3>
-                <small class="text-muted">Thu thập đa góc độ để nhận diện chính xác hơn</small>
-            </div>
-        </div>
-
-        <!-- Step Indicator -->
-        <div class="card mb-3">
-            <div class="card-body py-3">
-                <div class="d-flex justify-content-center align-items-center gap-2">
-                    <!-- Step 0: Front -->
-                    <div class="step-item" id="step-ind-0">
-                        <div class="step-circle bg-primary text-white">1</div>
-                        <small>Nhìn thẳng</small>
-                    </div>
-                    <div class="text-muted px-1">──</div>
-                    <!-- Step 1: Left -->
-                    <div class="step-item" id="step-ind-1">
-                        <div class="step-circle bg-light text-secondary border">2</div>
-                        <small>Quay trái</small>
-                    </div>
-                    <div class="text-muted px-1">──</div>
-                    <!-- Step 2: Right -->
-                    <div class="step-item" id="step-ind-2">
-                        <div class="step-circle bg-light text-secondary border">3</div>
-                        <small>Quay phải</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Pose Guide + Camera -->
-        <div class="card mb-3">
-            <div class="card-body text-center p-3">
-
-                <!-- Pose direction guide (hidden before start) -->
-                <div id="poseGuide" class="mb-3 d-none">
-                    <div id="poseArrow" class="pose-arrow">👁️</div>
-                    <div id="poseLabel" class="fw-bold fs-5 mt-1">Nhìn thẳng vào camera</div>
-                    <div id="poseFrameCount" class="text-muted small mt-1">0 / 10 frame</div>
-                </div>
-
-                <!-- Camera wrapper -->
-                <div id="cameraWrapper" class="position-relative d-inline-block d-none">
-                    <video id="videoEl" autoplay playsinline muted
-                           class="ring-bad"
-                           style="width:100%; max-width:400px; background:#000; display:block;"></video>
-                    <!-- Oval guide -->
-                    <div style="
-                        position:absolute; top:50%; left:50%;
-                        transform:translate(-50%,-50%);
-                        width:48%; padding-top:66%;
-                        border:3px dashed rgba(102,126,234,.55);
-                        border-radius:50%; pointer-events:none;
-                    "></div>
-                </div>
-                <canvas id="captureCanvas" style="display:none;"></canvas>
-
-                <!-- Placeholder -->
-                <div id="cameraPlaceholder" class="py-4">
-                    <i class="bi bi-camera-video" style="font-size:4rem;color:#ccc;"></i>
-                    <p class="text-muted mt-2 mb-0">Camera chưa mở</p>
-                </div>
-
-                <!-- Status text -->
-                <div id="statusMsg" class="mt-2 text-muted small text-center">
-                    Nhấn <strong>Bắt đầu</strong> để mở camera
-                </div>
-
-                <!-- Progress per step -->
-                <div id="stepProgress" class="mt-3 d-none">
-                    <div class="progress" style="height:10px;">
-                        <div id="stepProgressBar"
-                             class="progress-bar bg-success progress-bar-striped progress-bar-animated"
-                             style="width:0%;"></div>
-                    </div>
-                    <div class="d-flex justify-content-between mt-1">
-                        <small id="stepProgressLabel" class="text-muted">Bước 1/3</small>
-                        <small id="stepProgressCount" class="text-muted">0 / 10</small>
-                    </div>
-                </div>
-
-                <!-- Thumbnail strip -->
-                <div id="thumbnailStrip"
-                     class="d-flex flex-wrap gap-1 justify-content-center mt-3"
-                     style="min-height:0;"></div>
-
-                <!-- Instructions -->
-                <div id="instructions" class="alert alert-info mt-3 mb-0 text-start d-none">
-                    <i class="bi bi-info-circle"></i>
-                    <strong>Hướng dẫn:</strong>
-                    <ul class="mb-0 mt-1 small">
-                        <li>Mỗi bước hệ thống cần <strong>10 frame</strong> đúng góc</li>
-                        <li>Quay đầu <strong>từ từ</strong> theo hướng mũi tên</li>
-                        <li>Giữ khoảng cách 30–60 cm, ánh sáng đủ sáng</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- Overall Progress -->
-        <div class="card mb-3" id="overallProgressCard" style="display:none!important;">
-            <div class="card-body py-2">
-                <div class="d-flex justify-content-between mb-1">
-                    <small class="text-muted">Tổng tiến trình</small>
-                    <span id="totalProgressText" class="badge bg-secondary">0 / 30</span>
-                </div>
-                <div class="progress" style="height:6px;">
-                    <div id="totalProgressBar" class="progress-bar bg-info" style="width:0%;"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="d-grid gap-2" id="actionButtons">
-            <button id="btnStart" class="btn btn-primary btn-lg">
-                <i class="bi bi-play-circle"></i> Bắt đầu đăng ký khuôn mặt
-            </button>
-            <div class="d-flex gap-2">
-                <button id="btnPause"  class="btn btn-outline-warning flex-grow-1 d-none">
-                    <i class="bi bi-pause-circle"></i> Tạm dừng
-                </button>
-                <button id="btnResume" class="btn btn-outline-primary flex-grow-1 d-none">
-                    <i class="bi bi-play-circle"></i> Tiếp tục
-                </button>
-                <button id="btnReset"  class="btn btn-outline-danger d-none">
-                    <i class="bi bi-arrow-counterclockwise"></i> Làm lại
-                </button>
-            </div>
-        </div>
-
-        <!-- Success -->
-        <div id="successState" class="card border-success d-none mt-4">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-check-circle-fill text-success" style="font-size:3rem;"></i>
-                <h4 class="mt-3 text-success">Đăng ký khuôn mặt thành công!</h4>
-                <p class="text-muted">Ba góc khuôn mặt đã được lưu. Bạn có thể điểm danh bằng nhận diện AI.</p>
-                <a href="/student-dashboard" class="btn btn-success mt-2">
-                    <i class="bi bi-speedometer2"></i> Về Dashboard
-                </a>
-            </div>
-        </div>
-
+    <!-- Mandatory notice -->
+    <div class="alert alert-warning d-flex align-items-start gap-3 mb-4" id="mandatoryNotice">
+      <i class="bi bi-shield-lock-fill fs-3 text-warning flex-shrink-0 mt-1"></i>
+      <div>
+        <strong>Bước bắt buộc trước khi sử dụng hệ thống</strong><br>
+        <span class="text-muted">Bạn cần hoàn tất đăng ký khuôn mặt để có thể tham gia lớp học và điểm danh.
+        Quá trình chỉ mất khoảng <strong>1–2 phút</strong>.</span>
+      </div>
     </div>
+
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-person-bounding-box fs-5 text-primary"></i>
+        <span class="fw-semibold">Đăng ký khuôn mặt</span>
+        <span class="badge bg-danger ms-auto">Bắt buộc</span>
+      </div>
+      <div class="card-body">
+        <div id="alertBox"></div>
+
+        <!-- Step progress -->
+        <div class="row g-2 mb-4" id="stepIndicator">
+          <div class="col-4">
+            <div class="step-card text-center p-2 rounded border" id="step1">
+              <div class="fw-bold">1</div><small>Nhìn thẳng</small>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="step-card text-center p-2 rounded border" id="step2">
+              <div class="fw-bold">2</div><small>Sang trái</small>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="step-card text-center p-2 rounded border" id="step3">
+              <div class="fw-bold">3</div><small>Sang phải</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Webcam -->
+        <div class="text-center mb-3">
+          <div id="videoWrap">
+            <video id="webcam" autoplay playsinline muted></video>
+            <div id="overlay">
+              <i class="bi bi-camera-video fs-1 mb-2"></i>
+              <div>Nhấn <strong>"Bắt đầu đăng ký"</strong><br>để mở camera</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted" id="poseInstruction">Chuẩn bị sẵn sàng</span>
+          <span class="badge bg-primary" id="captureCount">0 frame</span>
+        </div>
+        <div class="progress mb-4" style="height:10px">
+          <div class="progress-bar bg-success" id="progressBar" style="width:0%"
+               role="progressbar"></div>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button class="btn btn-success btn-lg" id="startBtn" onclick="startRegistration()">
+            <i class="bi bi-camera-video me-2"></i>Bắt đầu đăng ký
+          </button>
+          <button class="btn btn-outline-danger d-none" id="stopBtn" onclick="stopRegistration()">
+            <i class="bi bi-stop-circle me-2"></i>Dừng lại
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tips -->
+    <div class="card mt-3">
+      <div class="card-body py-3">
+        <p class="fw-semibold mb-2"><i class="bi bi-lightbulb me-1 text-warning"></i>Hướng dẫn để đạt kết quả tốt</p>
+        <ul class="mb-0 text-muted small">
+          <li>Ngồi trước camera trong điều kiện ánh sáng tốt</li>
+          <li>Giữ khuôn mặt rõ ràng, không đội mũ hay đeo kính mát</li>
+          <li>Làm theo hướng dẫn: nhìn thẳng → quay sang trái → quay sang phải</li>
+          <li>Hệ thống sẽ tự động chuyển bước khi thu đủ dữ liệu</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/modules/student/face-registration.js') }}"></script>
-<script>
-    requireAuth();
-    if (!auth.hasRole('student')) window.location.href = '/login';
-</script>
 {% endblock %}

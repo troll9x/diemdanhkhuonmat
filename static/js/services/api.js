@@ -387,6 +387,137 @@ class APIService {
     async deleteFaceModel(modelId) {
         return this.delete(`/training/models/${modelId}`);
     }
+
+    // ============ TEACHER v2 ENDPOINTS ============
+
+    async teacherDashboard() {
+        return this.get('/teacher/dashboard');
+    }
+
+    async teacherGetClasses() {
+        return this.get('/teacher/classes');
+    }
+
+    async teacherCreateClass(data) {
+        return this.post('/teacher/classes', data);
+    }
+
+    async teacherGetClass(classId) {
+        return this.get(`/teacher/classes/${classId}`);
+    }
+
+    async teacherGetStudents(classId) {
+        return this.get(`/teacher/classes/${classId}/students`);
+    }
+
+    async teacherStartAttendance(classId, latitude, longitude) {
+        return this.post(`/teacher/classes/${classId}/attendance/start`, { latitude, longitude });
+    }
+
+    async teacherCloseAttendance(classId) {
+        return this.post(`/teacher/classes/${classId}/attendance/close`, {});
+    }
+
+    async teacherGetTodayAttendance(classId) {
+        return this.get(`/teacher/classes/${classId}/attendance/today`);
+    }
+
+    async teacherGetAttendanceLogs(classId) {
+        return this.get(`/teacher/classes/${classId}/attendance/logs`);
+    }
+
+    async teacherUpdateClass(classId, data) {
+        return this.put(`/teacher/classes/${classId}`, data);
+    }
+
+    async teacherDeleteClass(classId) {
+        return this.delete(`/teacher/classes/${classId}`);
+    }
+
+    async teacherToggleClass(classId) {
+        return this.patch(`/teacher/classes/${classId}/deactivate`, {});
+    }
+
+    async teacherGetCalendar(start, end) {
+        return this.get(`/teacher/calendar?start=${start}&end=${end}`);
+    }
+
+    async teacherGetSchedules(classId) {
+        return this.get(`/teacher/classes/${classId}/schedules`);
+    }
+
+    async teacherSaveSchedule(classId, data) {
+        return this.post(`/teacher/classes/${classId}/schedules`, data);
+    }
+
+    async teacherUpdateSchedule(classId, schedId, data) {
+        return this.put(`/teacher/classes/${classId}/schedules/${schedId}`, data);
+    }
+
+    async teacherDeleteSchedule(classId, schedId) {
+        return this.delete(`/teacher/classes/${classId}/schedules/${schedId}`);
+    }
+
+    // ============ STUDENT v2 ENDPOINTS ============
+
+    async studentDashboard() {
+        return this.get('/student/dashboard');
+    }
+
+    async studentJoinClass(classCode, studentCode) {
+        return this.post('/student/join-class', { class_code: classCode, student_code: studentCode });
+    }
+
+    async studentGetClasses() {
+        return this.get('/student/classes');
+    }
+
+    async studentGetActiveSession(classId) {
+        return this.get(`/student/classes/${classId}/active-session`);
+    }
+
+    async studentCheckinV2(sessionId, formData) {
+        const token = auth.getToken();
+        const response = await fetch(`${this.baseURL}/student/sessions/${sessionId}/check-in`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData,
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `API error: ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async studentGetAttendanceLogs() {
+        return this.get('/student/attendance-logs');
+    }
+
+    async studentRegisterFace(formData) {
+        const token = auth.getToken();
+        const response = await fetch(`${this.baseURL}/student/register-face`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData,
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `API error: ${response.status}`);
+        }
+        return response.json();
+    }
+
+    async studentCompleteRegistration() {
+        return this.post('/student/complete-registration', {});
+    }
+
+    async register(role, fullName, email, password, studentCode) {
+        return this.post('/auth/register', {
+            role, full_name: fullName, email, password,
+            student_code: studentCode || undefined,
+        }, { public: true });
+    }
 }
 
 // Global API service instance

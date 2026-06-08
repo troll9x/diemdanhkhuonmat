@@ -520,3 +520,166 @@ class Attendance(db.Model):
     check_in_time = db.Column(db.DateTime, default=datetime.utcnow)
     date = db.Column(db.Date, default=datetime.utcnow().date)
     status = db.Column(db.String(20), default='present')
+
+
+# ============================================================================
+# SIMPLIFIED CORE MODELS (v2) - Teacher/Student only, no complex admin
+# ============================================================================
+
+class AppUser(db.Model, TimestampMixin):
+    """Unified user model: role = teacher | student."""
+    __tablename__ = 'app_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False)        # teacher / student
+    full_name = db.Column(db.String(100), nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    last_login = db.Column(db.DateTime, nullable=True)
+
+    # Relationships
+    classrooms_owned = db.relationship(
+        'AppClassroom', backref='teacher', lazy='dynamic',
+        foreign_keys='AppClassroom.teacher_id'
+    )
+    enrollments = db.relationship(
+        'AppEnrollment', backref='student', lazy='dynamic',
+        foreign_keys='AppEnrollment.student_id'
+    )
+    face_embeddings_v2 = db.relationship('AppFaceEmbedding', backref='user', lazy='dynamic')
+    student_profile = db.relationship('AppStudentProfile', backref='user', uselist=False)
+
+
+class AppClassroom(db.Model, TimestampMixin):
+    """Simplified classroom created by a teacher."""
+    __tablename__ = 'app_classrooms'
+
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('app_users.id'), nullable=False, index=True)
+    name = db.Column(db.String(100), nullable=False)
+    class_code = db.Column(db.String(20), unique=True, nullable=False, index=True)
+    description = db.Column(db.Text, nullable=True)
+    start_date = db.Column(db.Date, nullable=True)   # Ngày bắt đầu khoá học
+    end_date = db.Column(db.Date, nullable=True)     # Ngày kết thúc khoá học
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    # Relationships
+    enrollments = db.relationship('AppEnrollment', backref='classroom', lazy='dynamic')
+    att_sessions = db.relationship('AttendanceSession', backref='classroom', lazy='dynamic')
+    schedules = db.relationship('AppClassSchedule', backref='classroom', lazy='dynamic',
+                                order_by='AppClassSchedule.day_of_week')
+
+
+class AppClassSchedule(db.Model, TimestampMixin):
+    """
+    Weekly recurring schedule for a classroom.
+    day_of_week: 0=Monday … 6=Sunday (Python weekday convention).
+    """
+    __tablename__ = 'app_class_schedules'
+
+    id = db.Column(db.Integer, primary_key=True)
+    classroom_id = db.Column(db.Integer, db.ForeignKey('app_classrooms.id'), nullable=False, index=True)
+    day_of_week = db.Column(db.Integer, nullable=False)   # 0–6
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+    late_after_minutes = db.Column(db.Integer, default=15, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('classroom_id', 'day_of_week', name='uq_app_class_schedule_day'),
+    )
+
+
+class AppEnrollment(db.Model, TimestampMixin):
+    """Student enrollment in a classroom."""
+    __tablename__ = 'app_enrollments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    classroom_id = db.Column(db.Integer, db.ForeignKey('app_classrooms.id'), nullable=False, index=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('app_users.id'), nullable=False, index=True)
+    student_code = db.Column(db.String(20), nullable=True)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('classroom_id', 'student_id', name='uq_app_classroom_student'),
+    )
+
+
+class AppStudentProfile(db.Model, TimestampMixin):
+    """Extra profile info for student AppUsers."""
+    __tablename__ = 'app_student_profiles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('app_users.id'), unique=True, nullable=False, index=True)
+    student_code = db.Column(db.String(20), nullable=True)
+    phone = db.Column(db.String(20), nullable=True)
+    face_registered = db.Column(db.Boolean, default=False, nullable=False)
+
+
+class AppFaceEmbedding(db.Model, TimestampMixin):
+    """Face embeddings for AppUser students."""
+    __tablename__ = 'app_face_embeddings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('app_users.id'), nullable=False, index=True)
+    embedding_vector = db.Column(db.LargeBinary, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+
+
+class AttendanceSession(db.Model, TimestampMixin):
+    """
+    One attendance session per classroom per day per type.
+    session_type: 'start' = Đầu giờ, 'end' = Cuối giờ
+    """
+    __tablename__ = 'attendance_sessions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    classroom_id = db.Column(db.Integer, db.ForeignKey('app_classrooms.id'), nullable=False, index=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('app_users.id'), nullable=False, index=True)
+    session_date = db.Column(db.Date, nullable=False, index=True)
+    session_type = db.Column(db.String(10), default='start', nullable=False)  # start / end
+    status = db.Column(db.String(20), default='open', nullable=False)          # open / closed
+    teacher_latitude = db.Column(db.Float, nullable=True)
+    teacher_longitude = db.Column(db.Float, nullable=True)
+    scheduled_start_time = db.Column(db.Time, nullable=True)   # from class schedule
+    late_after_minutes = db.Column(db.Integer, default=15, nullable=False)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    closed_at = db.Column(db.DateTime, nullable=True)
+
+    # Relationships
+    records = db.relationship('AppAttendanceRecord', backref='session', lazy='dynamic')
+    teacher_user = db.relationship('AppUser', foreign_keys=[teacher_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('classroom_id', 'session_date', 'session_type',
+                            name='uq_session_classroom_date_type'),
+    )
+
+
+class AppAttendanceRecord(db.Model, TimestampMixin):
+    """Individual check-in record within an AttendanceSession."""
+    __tablename__ = 'app_attendance_records'
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.Integer, db.ForeignKey('attendance_sessions.id'), nullable=False, index=True)
+    classroom_id = db.Column(db.Integer, db.ForeignKey('app_classrooms.id'), nullable=False, index=True)
+    student_id = db.Column(db.Integer, db.ForeignKey('app_users.id'), nullable=False, index=True)
+    checkin_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    student_latitude = db.Column(db.Float, nullable=True)
+    student_longitude = db.Column(db.Float, nullable=True)
+    distance_meters = db.Column(db.Float, nullable=True)
+    face_confidence = db.Column(db.Float, nullable=True)
+    status = db.Column(db.String(20), default='present', nullable=False)  # present / rejected
+    is_late = db.Column(db.Boolean, default=False, nullable=False)
+    evidence_image_path = db.Column(db.String(255), nullable=True)
+    reject_reason = db.Column(db.String(255), nullable=True)
+
+    # Relationships
+    student_user = db.relationship('AppUser', foreign_keys=[student_id])
+    classroom_ref = db.relationship('AppClassroom', foreign_keys=[classroom_id])
+
+    __table_args__ = (
+        db.UniqueConstraint('session_id', 'student_id', name='uq_app_session_student'),
+    )

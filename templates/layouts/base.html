@@ -151,5 +151,30 @@
     <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
     <script src="{{ url_for('static', filename='js/services/api.js') }}"></script>
     {% block extra_js %}{% endblock %}
+
+    <!-- Student face-registration guard: redirect if face not yet registered -->
+    <script>
+    (async function () {
+        const FACE_REG_PATH = '/student/face-registration';
+        const EXEMPT = [FACE_REG_PATH, '/login', '/register'];
+        const curPath = window.location.pathname;
+        if (EXEMPT.some(p => curPath.startsWith(p))) return;
+
+        const user = (typeof auth !== 'undefined') ? auth.getUser() : null;
+        if (!user || user.role !== 'student') return;
+
+        try {
+            const token = auth.getToken();
+            const res = await fetch('/api/student/me', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data.face_registered) {
+                window.location.href = FACE_REG_PATH;
+            }
+        } catch (_) {}
+    }());
+    </script>
 </body>
 </html>

@@ -1,298 +1,125 @@
 {% extends "layouts/base.html" %}
+{% block title %}Dashboard — Giảng viên{% endblock %}
 
-{% block title %}Dashboard Giảng viên - Smart Attendance{% endblock %}
+{% block extra_css %}
+<!-- FullCalendar -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/main.min.css" rel="stylesheet">
+<style>
+/* ── Calendar overrides ────────────────────────── */
+#teacherCalendar { min-height: 520px; }
+
+.fc .fc-toolbar-title   { font-size: 1.05rem; font-weight: 700; }
+.fc .fc-button           { font-size: .8rem; padding: .25rem .6rem; }
+.fc .fc-daygrid-event    { border-radius: 4px; font-size: .75rem; cursor: pointer; }
+
+/* Attendance indicator dots inside event */
+.fc-event-att { display:inline-block; width:7px; height:7px;
+                border-radius:50%; margin-left:3px; vertical-align:middle; }
+.att-start  { background:#fff; }
+.att-end    { background:#ffd700; }
+
+/* Tooltip card */
+#calTooltip {
+    position:fixed; z-index:9999; max-width:260px;
+    background:#fff; border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.18);
+    padding:14px 16px; display:none; font-size:.85rem;
+}
+#calTooltip .cls-dot {
+    width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:6px;
+}
+</style>
+{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Dashboard Giảng viên</h2>
 
-<!-- Stats -->
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-value" id="stat-classes">—</div>
-            <div class="stat-label">Lớp học của tôi</div>
+<!-- ── Welcome row ──────────────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">Dashboard Giảng viên</h4>
+        <p class="text-muted mb-0" id="welcomeMsg">Xin chào!</p>
+    </div>
+    <a href="/teacher/classes" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-2"></i>Tạo lớp mới
+    </a>
+</div>
+
+<!-- ── Stat cards ───────────────────────────────────────────────────── -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-value" id="totalClasses">—</div>
+            <div class="stat-label"><i class="bi bi-grid-3x3-gap me-1"></i>Tổng lớp học</div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-value" id="stat-sessions">—</div>
-            <div class="stat-label">Buổi học hôm nay</div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-value" id="totalStudents">—</div>
+            <div class="stat-label"><i class="bi bi-people me-1"></i>Tổng sinh viên</div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-value" id="stat-attendance">—</div>
-            <div class="stat-label">Tổng điểm danh</div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-value" id="todaySessions">—</div>
+            <div class="stat-label"><i class="bi bi-calendar-check me-1"></i>Phiên hôm nay</div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="stat-card">
-            <div class="stat-value" id="stat-week">—</div>
-            <div class="stat-label">Điểm danh tuần này</div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card text-center">
+            <div class="stat-value text-success" id="openSessions">—</div>
+            <div class="stat-label"><i class="bi bi-broadcast me-1"></i>Đang mở</div>
         </div>
     </div>
 </div>
 
-<!-- Tabs -->
-<ul class="nav nav-tabs mb-4" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="sessions-tab" data-bs-toggle="tab" data-bs-target="#sessions" type="button" role="tab">
-            <i class="bi bi-calendar-event"></i> Buổi học hôm nay
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="classes-tab" data-bs-toggle="tab" data-bs-target="#classes" type="button" role="tab">
-            <i class="bi bi-door-closed"></i> Lớp học
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab">
-            <i class="bi bi-clipboard-check"></i> Điểm danh gần đây
-        </button>
-    </li>
-</ul>
+<!-- ── Main two-column layout ───────────────────────────────────────── -->
+<div class="row g-4">
 
-<div class="tab-content">
-    <!-- Sessions Tab -->
-    <div class="tab-pane fade show active" id="sessions" role="tabpanel">
-        <div class="card">
+    <!-- Calendar (left / top) -->
+    <div class="col-lg-8">
+        <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span>Buổi học hôm nay</span>
-                <a href="/teacher/sessions" class="btn btn-sm btn-primary">Xem tất cả buổi học</a>
+                <span><i class="bi bi-calendar3 me-2 text-primary"></i>Lịch giảng dạy</span>
+                <!-- Legend built by JS -->
+                <div id="calLegend" class="d-flex flex-wrap gap-2"></div>
             </div>
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Lớp</th>
-                            <th>Môn học</th>
-                            <th>Thời gian</th>
-                            <th>Trạng thái</th>
-                            <th>Hành động</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sessions-table">
-                        <tr><td colspan="5" class="text-center text-muted py-4">Đang tải...</td></tr>
-                    </tbody>
-                </table>
+            <div class="card-body p-2">
+                <div id="teacherCalendar"></div>
             </div>
         </div>
     </div>
 
-    <!-- Classes Tab -->
-    <div class="tab-pane fade" id="classes" role="tabpanel">
-        <div class="card">
-            <div class="card-header">Lớp học của tôi</div>
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Tên lớp</th>
-                            <th>Mã lớp</th>
-                            <th>Sinh viên</th>
-                            <th>Môn học</th>
-                        </tr>
-                    </thead>
-                    <tbody id="classes-table">
-                        <tr><td colspan="4" class="text-center text-muted py-4">Đang tải...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    <!-- Right column -->
+    <div class="col-lg-4 d-flex flex-column gap-4">
 
-    <!-- Attendance Tab -->
-    <div class="tab-pane fade" id="attendance" role="tabpanel">
-        <div class="card mb-3">
-            <div class="card-body py-2">
-                <div class="row g-2 align-items-end">
-                    <div class="col-md-4">
-                        <label class="form-label small mb-1">Lớp học</label>
-                        <select id="filter-classroom" class="form-select form-select-sm">
-                            <option value="">Tất cả lớp</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Từ ngày</label>
-                        <input type="date" id="filter-date-from" class="form-control form-control-sm">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small mb-1">Đến ngày</label>
-                        <input type="date" id="filter-date-to" class="form-control form-control-sm">
-                    </div>
-                    <div class="col-md-2">
-                        <button class="btn btn-sm btn-primary w-100" onclick="loadAttendance()">Lọc</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Today's classes -->
         <div class="card">
-            <div class="card-header">Bản ghi Điểm danh gần đây</div>
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Sinh viên</th>
-                            <th>Lớp</th>
-                            <th>Ngày</th>
-                            <th>Giờ điểm danh</th>
-                            <th>Trạng thái</th>
-                        </tr>
-                    </thead>
-                    <tbody id="attendance-table">
-                        <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
-                    </tbody>
-                </table>
+            <div class="card-header"><i class="bi bi-sun me-2 text-warning"></i>Hôm nay</div>
+            <div class="card-body p-0" id="todaySchedule">
+                <div class="text-center py-3 text-muted small">Đang tải...</div>
             </div>
         </div>
+
+        <!-- Recent attendance -->
+        <div class="card flex-fill">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history me-2"></i>Điểm danh gần đây</span>
+                <a href="/teacher/logs" class="btn btn-sm btn-outline-primary">Tất cả</a>
+            </div>
+            <div class="card-body p-0" id="recentAttendance">
+                <div class="text-center py-3 text-muted small">Đang tải...</div>
+            </div>
+        </div>
+
     </div>
 </div>
+
+<!-- Tooltip -->
+<div id="calTooltip"></div>
+
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    requireAuth();
-    if (!auth.hasRole('lecturer')) window.location.href = '/login';
-
-    document.addEventListener('DOMContentLoaded', async () => {
-        const user = auth.getUser();
-        const nameEl = document.getElementById('user-name');
-        if (nameEl && user) nameEl.textContent = user.name || user.full_name || '';
-
-        await loadDashboardStats();
-        await loadTodaySessions();
-        await loadClasses();
-        await loadAttendance();
-    });
-
-    let _dashboardData = null;
-
-    async function loadDashboardStats() {
-        try {
-            _dashboardData = await api.getTeacherDashboard();
-            const s = _dashboardData.stats || {};
-            document.getElementById('stat-classes').textContent    = s.assigned_classrooms ?? '—';
-            document.getElementById('stat-sessions').textContent   = s.today_sessions ?? '—';
-            document.getElementById('stat-attendance').textContent = s.total_attendance ?? '—';
-            document.getElementById('stat-week').textContent       = s.week_attendance ?? '—';
-
-            // Populate classroom filter
-            const sel = document.getElementById('filter-classroom');
-            (_dashboardData.classes || []).forEach(c => {
-                const o = document.createElement('option');
-                o.value = c.id;
-                o.textContent = c.class_name || c.name;
-                sel.appendChild(o);
-            });
-        } catch (e) {
-            console.error('Stats error:', e);
-        }
-    }
-
-    async function loadTodaySessions() {
-        const tbody = document.getElementById('sessions-table');
-        try {
-            const data = _dashboardData || await api.getTeacherDashboard();
-            const sessions = data.today_sessions || [];
-
-            if (!sessions.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không có buổi học hôm nay</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = sessions.map(s => `
-                <tr>
-                    <td>${esc(s.classroom)}</td>
-                    <td>${esc(s.subject)}</td>
-                    <td>${s.start_time || '—'} – ${s.end_time || '—'}</td>
-                    <td>${statusBadge(s.status)}</td>
-                    <td>
-                        <a href="/teacher/sessions" class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-calendar-event"></i> Buổi học
-                        </a>
-                    </td>
-                </tr>
-            `).join('');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">Lỗi tải dữ liệu</td></tr>';
-            console.error(e);
-        }
-    }
-
-    async function loadClasses() {
-        const tbody = document.getElementById('classes-table');
-        try {
-            const data = _dashboardData || await api.getTeacherDashboard();
-            const classes = data.classes || [];
-
-            if (!classes.length) {
-                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Chưa được phân công lớp nào</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = classes.map(c => `
-                <tr>
-                    <td><strong>${esc(c.class_name || c.name)}</strong></td>
-                    <td><code>${esc(c.class_code || c.code)}</code></td>
-                    <td>${c.student_count ?? 0}</td>
-                    <td>${esc(c.subject_name || '—')}</td>
-                </tr>
-            `).join('');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-danger py-3">Lỗi tải dữ liệu</td></tr>';
-            console.error(e);
-        }
-    }
-
-    async function loadAttendance() {
-        const tbody = document.getElementById('attendance-table');
-        try {
-            const params = { page: 1, per_page: 30 };
-            const cid = document.getElementById('filter-classroom').value;
-            const df  = document.getElementById('filter-date-from').value;
-            const dt  = document.getElementById('filter-date-to').value;
-            if (cid) params.classroom_id = cid;
-            if (df)  params.start_date   = df;
-            if (dt)  params.end_date     = dt;
-
-            const query = new URLSearchParams(params).toString();
-            const data  = await api.get('/reports/attendance?' + query);
-            const records = data.records || [];
-
-            if (!records.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có bản ghi điểm danh</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = records.map((r, i) => `
-                <tr>
-                    <td>${i + 1}</td>
-                    <td>${esc(r.student_name)}</td>
-                    <td>${esc(r.classroom_name)}</td>
-                    <td>${r.session_date || '—'}</td>
-                    <td>${r.attendance_time || '—'}</td>
-                    <td>${statusBadge(r.status)}</td>
-                </tr>
-            `).join('');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Lỗi tải dữ liệu</td></tr>';
-            console.error(e);
-        }
-    }
-
-    function statusBadge(s) {
-        const map = { scheduled:'secondary', ongoing:'warning', completed:'success',
-                      cancelled:'danger', present:'success', late:'warning', absent:'danger' };
-        const labels = { scheduled:'Lên lịch', ongoing:'Đang học', completed:'Hoàn thành',
-                         cancelled:'Hủy', present:'Có mặt', late:'Muộn', absent:'Vắng' };
-        const cls   = map[s]    || 'secondary';
-        const label = labels[s] || s;
-        return `<span class="badge bg-${cls}">${label}</span>`;
-    }
-
-    function esc(t) {
-        const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML;
-    }
-</script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script src="{{ url_for('static', filename='js/modules/teacher/dashboard.js') }}"></script>
 {% endblock %}

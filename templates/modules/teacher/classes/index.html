@@ -1,0 +1,200 @@
+{% extends "layouts/base.html" %}
+{% block title %}Lớp học — Giảng viên{% endblock %}
+
+{% block extra_css %}
+<style>
+.sched-row { background: #f8f9fa; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="bi bi-grid-3x3-gap me-2"></i>Lớp học của tôi</h4>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createClassModal">
+        <i class="bi bi-plus-circle me-2"></i>Tạo lớp mới
+    </button>
+</div>
+
+<div id="alertBox"></div>
+<div id="classList">
+    <div class="text-center py-5 text-muted">
+        <div class="spinner-border me-2"></div>Đang tải lớp học...
+    </div>
+</div>
+
+<!-- ══ Modal tạo lớp ═══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="createClassModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Tạo lớp học mới</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="createAlertBox"></div>
+
+        <!-- Thông tin cơ bản -->
+        <h6 class="fw-semibold text-primary mb-3">
+          <i class="bi bi-info-circle me-2"></i>Thông tin lớp học
+        </h6>
+        <div class="row g-3 mb-4">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Tên lớp <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="className"
+                   placeholder="VD: Lập trình Python — Khoá K21">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Mô tả <span class="text-muted small">(tuỳ chọn)</span></label>
+            <textarea class="form-control" id="classDesc" rows="2"
+                      placeholder="Mô tả nội dung, yêu cầu lớp học..."></textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Ngày bắt đầu <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="classStartDate">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Ngày kết thúc <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="classEndDate">
+          </div>
+        </div>
+
+        <!-- Lịch học -->
+        <h6 class="fw-semibold text-primary mb-2">
+          <i class="bi bi-calendar3 me-2"></i>Lịch học hàng tuần
+          <span class="text-danger">*</span>
+          <small class="text-muted fw-normal ms-1">(ít nhất 1 buổi)</small>
+        </h6>
+
+        <div id="schedRows"></div>
+
+        <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="addSchedRow()">
+          <i class="bi bi-plus me-1"></i>Thêm buổi học
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Huỷ</button>
+        <button class="btn btn-primary" id="createClassBtn" onclick="createClass()">
+          <span id="createBtnText"><i class="bi bi-check2 me-1"></i>Tạo lớp</span>
+          <span id="createBtnSpinner" class="spinner-border spinner-border-sm d-none ms-1"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal chỉnh sửa lớp ═════════════════════════════════════════════════ -->
+<div class="modal fade" id="editClassModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Chỉnh sửa lớp học</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="editAlertBox"></div>
+        <input type="hidden" id="editClassId">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tên lớp <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="editClassName">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Mô tả</label>
+          <textarea class="form-control" id="editClassDesc" rows="2"></textarea>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Ngày bắt đầu <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="editStartDate">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Ngày kết thúc <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="editEndDate">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Huỷ</button>
+        <button class="btn btn-primary" id="editSaveBtn" onclick="saveEditClass()">
+          <i class="bi bi-save me-1"></i>Lưu thay đổi
+          <span id="editSaveSpinner" class="spinner-border spinner-border-sm d-none ms-1"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal sinh viên ══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="studentsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="studentsModalTitle">Sinh viên trong lớp</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="studentsList">
+          <div class="text-center py-4"><div class="spinner-border"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal thời khóa biểu ════════════════════════════════════════════════ -->
+<div class="modal fade" id="scheduleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="scheduleModalTitle">
+          <i class="bi bi-calendar3 me-2"></i>Thời khóa biểu
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="scheduleAlertBox"></div>
+        <div id="scheduleList" class="mb-4"></div>
+
+        <div class="card border-primary">
+          <div class="card-header bg-primary text-white">
+            <i class="bi bi-plus-circle me-2"></i>Thêm / Cập nhật buổi học
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Thứ</label>
+                <select class="form-select" id="schedDay">
+                  <option value="0">Thứ 2</option><option value="1">Thứ 3</option>
+                  <option value="2">Thứ 4</option><option value="3">Thứ 5</option>
+                  <option value="4">Thứ 6</option><option value="5">Thứ 7</option>
+                  <option value="6">Chủ nhật</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Giờ bắt đầu</label>
+                <input type="time" class="form-control" id="schedStart" value="07:30">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Giờ kết thúc</label>
+                <input type="time" class="form-control" id="schedEnd" value="09:30">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Muộn sau (phút)</label>
+                <input type="number" class="form-control" id="schedLate" value="15" min="1" max="120">
+              </div>
+              <div class="col-12">
+                <button class="btn btn-primary" onclick="saveSchedule()">
+                  <i class="bi bi-save me-2"></i>Lưu lịch
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/teacher/classes.js') }}"></script>
+{% endblock %}

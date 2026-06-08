@@ -1,121 +1,57 @@
 {% extends "layouts/base.html" %}
+{% block title %}Điểm danh{% endblock %}
 
-{% block title %}Điểm danh - Smart Attendance{% endblock %}
+{% block extra_css %}
+<style>
+#webcam { width:100%; max-width:480px; border-radius:12px; transform:scaleX(-1); }
+#resultBox { display:none; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-7 col-lg-6">
-        <!-- Header -->
-        <div class="d-flex align-items-center mb-4">
-            <a href="/student-dashboard" class="btn btn-outline-secondary btn-sm me-3">
-                <i class="bi bi-arrow-left"></i>
-            </a>
-            <div>
-                <h3 class="mb-0"><i class="bi bi-camera-fill text-success"></i> Điểm danh bằng khuôn mặt</h3>
-                <small class="text-muted">Nhận diện khuôn mặt để xác nhận có mặt</small>
-            </div>
-        </div>
+    <div class="col-md-7">
+        <h4 class="fw-bold mb-4"><i class="bi bi-camera-video me-2"></i>Điểm danh</h4>
 
-        <!-- Session Info Card -->
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <i class="bi bi-info-circle"></i> Thông tin buổi học
-            </div>
-            <div class="card-body">
-                <div id="sessionLoading" class="text-center py-2">
-                    <div class="spinner-border spinner-border-sm text-primary"></div>
-                    <span class="ms-2 text-muted">Đang tải...</span>
-                </div>
-                <div id="sessionInfo" class="d-none">
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="text-muted small">Lớp học</label>
-                            <div class="fw-semibold" id="sessClassroom">—</div>
-                        </div>
-                        <div class="col-6">
-                            <label class="text-muted small">Môn học</label>
-                            <div class="fw-semibold" id="sessSubject">—</div>
-                        </div>
-                        <div class="col-6">
-                            <label class="text-muted small">Ngày</label>
-                            <div id="sessDate">—</div>
-                        </div>
-                        <div class="col-6">
-                            <label class="text-muted small">Giờ</label>
-                            <div id="sessTime">—</div>
-                        </div>
-                        <div class="col-12">
-                            <label class="text-muted small">Trạng thái</label>
-                            <div id="sessStatus">—</div>
-                        </div>
-                    </div>
-                </div>
-                <div id="sessionError" class="alert alert-danger d-none mb-0">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <span id="sessionErrorMsg">Không thể tải thông tin buổi học</span>
+        <div id="alertBox"></div>
+
+        <!-- Session selector -->
+        <div class="card mb-4" id="sessionSelector">
+            <div class="card-header">Chọn lớp để điểm danh</div>
+            <div class="card-body" id="sessionList">
+                <div class="text-center py-3 text-muted">
+                    <div class="spinner-border spinner-border-sm me-2"></div>Đang tìm phiên đang mở...
                 </div>
             </div>
         </div>
 
-        <!-- Camera Card -->
-        <div class="card mb-4" id="checkinCard">
-            <div class="card-body text-center p-3">
-                <div id="cameraWrapper" class="position-relative d-inline-block d-none">
-                    <video id="videoEl" autoplay playsinline muted
-                           class="rounded border"
-                           style="width:100%; max-width:420px; background:#000; display:block;"></video>
-                    <div style="
-                        position:absolute; top:50%; left:50%;
-                        transform:translate(-50%,-50%);
-                        width:55%; padding-top:75%;
-                        border:3px solid rgba(40,167,69,0.7);
-                        border-radius:50%;
-                        pointer-events:none;
-                    "></div>
-                </div>
-                <canvas id="captureCanvas" style="display:none;"></canvas>
+        <!-- Checkin panel (hidden until session selected) -->
+        <div class="card" id="checkinPanel" style="display:none">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span id="checkinTitle">Điểm danh</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="cancelCheckin()">
+                    <i class="bi bi-arrow-left me-1"></i>Quay lại
+                </button>
+            </div>
+            <div class="card-body text-center">
+                <video id="webcam" autoplay playsinline muted class="d-none mb-3"></video>
 
-                <div id="cameraPlaceholder" class="py-4">
-                    <i class="bi bi-camera-video" style="font-size:4rem; color:#ccc;"></i>
-                    <p class="text-muted mt-2 mb-0">Nhấn nút bên dưới để mở camera và điểm danh</p>
-                </div>
+                <div id="resultBox" class="mb-3"></div>
 
-                <!-- Spinner while processing -->
-                <div id="processingSpinner" class="py-3 d-none">
-                    <div class="spinner-border text-success"></div>
-                    <p class="mt-2 text-muted">Đang xử lý nhận diện khuôn mặt...</p>
-                </div>
-
-                <!-- Result -->
-                <div id="resultBox" class="d-none mt-3">
-                    <div id="resultIcon" style="font-size:3rem;"></div>
-                    <h5 id="resultTitle" class="mt-2"></h5>
-                    <p id="resultMessage" class="text-muted small"></p>
-                    <div id="resultDetail" class="text-muted small"></div>
+                <div id="checkinControls">
+                    <p class="text-muted mb-3">Nhấn nút bên dưới để bắt đầu quá trình điểm danh bằng khuôn mặt + GPS.</p>
+                    <button class="btn btn-success btn-lg" id="checkinBtn" onclick="startCheckin()">
+                        <i class="bi bi-check2-circle me-2"></i>Điểm danh ngay
+                        <span id="checkinSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                    </button>
                 </div>
             </div>
-        </div>
-
-        <!-- Buttons -->
-        <div class="d-grid gap-2" id="actionButtons">
-            <button id="btnCheckin" class="btn btn-success btn-lg">
-                <i class="bi bi-camera"></i> Mở camera và điểm danh
-            </button>
-            <button id="btnRetry" class="btn btn-outline-primary d-none">
-                <i class="bi bi-arrow-clockwise"></i> Thử lại
-            </button>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-    const SESSION_ID = {{ session_id }};
-</script>
+<script>const PAGE_SESSION_ID = {{ session_id | default('null') }};</script>
 <script src="{{ url_for('static', filename='js/modules/student/checkin.js') }}"></script>
-<script>
-    requireAuth();
-    if (!auth.hasRole('student')) window.location.href = '/login';
-</script>
 {% endblock %}
