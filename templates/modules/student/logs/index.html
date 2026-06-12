@@ -1,0 +1,174 @@
+{% extends "layouts/base.html" %}
+{% block title %}Lịch sử điểm danh — Sinh viên{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">Lịch sử điểm danh</h4>
+        <p class="text-muted mb-0">Xem lại toàn bộ lịch sử điểm danh của bạn</p>
+    </div>
+    <button class="btn btn-outline-secondary btn-sm" onclick="loadLogs()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Làm mới
+    </button>
+</div>
+
+<!-- Stats summary -->
+<div class="row g-3 mb-4" id="statsSummary">
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+            <div class="fs-4 fw-bold text-primary" id="statTotal">—</div>
+            <div class="small text-muted">Tổng buổi</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+            <div class="fs-4 fw-bold text-success" id="statPresent">—</div>
+            <div class="small text-muted">Có mặt</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+            <div class="fs-4 fw-bold text-warning" id="statLate">—</div>
+            <div class="small text-muted">Muộn</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center p-3">
+            <div class="fs-4 fw-bold text-danger" id="statAbsent">—</div>
+            <div class="small text-muted">Vắng mặt</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold">Từ ngày</label>
+                <input type="date" id="filterFrom" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-semibold">Đến ngày</label>
+                <input type="date" id="filterTo" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-primary btn-sm w-100" onclick="loadLogs()">
+                    <i class="bi bi-search me-1"></i>Tìm kiếm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Logs table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3">Ngày</th>
+                    <th>Lớp học</th>
+                    <th>Ca học</th>
+                    <th>Giờ điểm danh</th>
+                    <th>Trạng thái</th>
+                </tr>
+            </thead>
+            <tbody id="logsTableBody">
+                <tr>
+                    <td colspan="5" class="text-center py-4 text-muted">
+                        <i class="bi bi-hourglass-split fs-4 d-block mb-2"></i>
+                        Đang tải dữ liệu...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const STATUS_LABELS = {
+    present: { label: 'Có mặt', cls: 'bg-success-subtle text-success' },
+    late:    { label: 'Muộn',   cls: 'bg-warning-subtle text-warning' },
+    absent:  { label: 'Vắng',   cls: 'bg-danger-subtle text-danger' },
+};
+
+async function loadLogs() {
+    const from = document.getElementById('filterFrom').value;
+    const to   = document.getElementById('filterTo').value;
+    const tbody = document.getElementById('logsTableBody');
+
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-muted">
+        <div class="spinner-border spinner-border-sm me-2"></div>Đang tải...</td></tr>`;
+
+    try {
+        const params = new URLSearchParams({ page: 1, per_page: 100 });
+        if (from) params.append('from', from);
+        if (to)   params.append('to', to);
+
+        const resp = await fetch(`/api/student/attendance-logs?${params}`, {
+            headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('access_token') || '') }
+        });
+
+        if (!resp.ok) throw new Error('Không thể tải lịch sử');
+        const data = await resp.json();
+        const records = normalizeLogs(data.logs || []);
+        renderLogs(records);
+        updateStats(records);
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">
+            <i class="bi bi-exclamation-circle me-2"></i>${err.message}</td></tr>`;
+    }
+}
+
+function normalizeLogs(logs) {
+    const from = document.getElementById('filterFrom').value;
+    const to = document.getElementById('filterTo').value;
+
+    return logs
+        .filter(r => {
+            const d = r.session_date || '';
+            if (from && d < from) return false;
+            if (to && d > to) return false;
+            return true;
+        })
+        .map(r => ({
+            date: r.session_date || '',
+            class_name: r.classroom_name || '',
+            session_name: r.session_type_label || '',
+            check_in_time: r.checkin_time || '',
+            status: r.status === 'present' && r.is_late ? 'late' : (r.status || ''),
+        }));
+}
+
+function renderLogs(records) {
+    const tbody = document.getElementById('logsTableBody');
+    if (!records.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-muted">
+            <i class="bi bi-inbox fs-4 d-block mb-2"></i>Chưa có lịch sử điểm danh</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = records.map(r => {
+        const s = STATUS_LABELS[r.status] || { label: r.status, cls: 'bg-secondary-subtle text-secondary' };
+        return `<tr>
+            <td class="ps-3 small">${r.date || ''}</td>
+            <td class="small">${r.class_name || ''}</td>
+            <td class="small text-muted">${r.session_name || ''}</td>
+            <td class="small">${r.check_in_time || '—'}</td>
+            <td><span class="badge ${s.cls}">${s.label}</span></td>
+        </tr>`;
+    }).join('');
+}
+
+function updateStats(records) {
+    document.getElementById('statTotal').textContent   = records.length;
+    document.getElementById('statPresent').textContent = records.filter(r => r.status === 'present').length;
+    document.getElementById('statLate').textContent    = records.filter(r => r.status === 'late').length;
+    document.getElementById('statAbsent').textContent  = records.filter(r => r.status === 'absent').length;
+}
+
+document.addEventListener('DOMContentLoaded', loadLogs);
+</script>
+{% endblock %}

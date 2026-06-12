@@ -59,7 +59,7 @@ face_data/
 
 # Logs
 *.log
-logs/
+/logs/
 
 # Test coverage
 .coverage
