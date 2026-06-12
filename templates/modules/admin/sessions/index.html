@@ -1,0 +1,117 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Quan ly buoi hoc - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ page_title or 'Quan ly buoi hoc' }}</h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#sessionModal" onclick="resetSessionForm()">
+            <i class="bi bi-plus"></i> Tao buoi hoc
+        </button>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#generateModal">
+            <i class="bi bi-gear"></i> Tao tu lich lap
+        </button>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-2"><input type="date" id="filterDateFrom" class="form-control"></div>
+            <div class="col-md-2"><input type="date" id="filterDateTo" class="form-control"></div>
+            <div class="col-md-2"><select id="filterClassroom" class="form-select"><option value="">Tat ca lop</option></select></div>
+            <div class="col-md-2"><select id="filterSubject" class="form-select"><option value="">Tat ca mon</option></select></div>
+            <div class="col-md-2"><select id="filterLecturer" class="form-select"><option value="">Tat ca giang vien</option></select></div>
+            <div class="col-md-1">
+                <select id="filterStatus" class="form-select">
+                    <option value="">Tat ca</option>
+                    <option value="scheduled">scheduled</option>
+                    <option value="ongoing">ongoing</option>
+                    <option value="completed">completed</option>
+                    <option value="cancelled">cancelled</option>
+                </select>
+            </div>
+            <div class="col-md-1"><button class="btn btn-outline-secondary w-100" onclick="loadSessions()"><i class="bi bi-search"></i></button></div>
+        </div>
+    </div>
+</div>
+
+<div id="alertContainer"></div>
+<div id="loadingState" class="text-center d-none"><div class="spinner-border text-primary"></div><p class="mt-2">Dang tai...</p></div>
+<div id="emptyState" class="text-center d-none py-5"><i class="bi bi-inbox" style="font-size:3rem;color:#ccc;"></i><p class="text-muted mt-3">Khong co buoi hoc</p></div>
+
+<div id="tableContainer" class="d-none">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Ngay</th><th>Gio</th><th>Lop</th><th>Mon</th><th>Giang vien</th><th>Phong</th><th>Trang thai</th><th>Hanh dong</th>
+                </tr>
+            </thead>
+            <tbody id="sessionsTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="sessionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="sessionModalTitle">Tao buoi hoc</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form id="sessionForm" onsubmit="saveSession(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="sessionId">
+                    <div class="mb-3"><label class="form-label">Ngay *</label><input type="date" id="sessDate" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">Lop *</label><select id="sessClassroom" class="form-select" required><option value="">-- Chon lop --</option></select></div>
+                    <div class="mb-3"><label class="form-label">Mon *</label><select id="sessSubject" class="form-select" required><option value="">-- Chon mon --</option></select></div>
+                    <div class="mb-3"><label class="form-label">Phong</label><select id="sessRoom" class="form-select"><option value="">-- Chon phong --</option></select></div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3"><label class="form-label">Bat dau *</label><input type="time" id="sessStart" class="form-control" required></div>
+                        <div class="col-md-6 mb-3"><label class="form-label">Ket thuc *</label><input type="time" id="sessEnd" class="form-control" required></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Trang thai</label>
+                        <select id="sessStatus" class="form-select">
+                            <option value="scheduled">scheduled</option>
+                            <option value="ongoing">ongoing</option>
+                            <option value="completed">completed</option>
+                            <option value="cancelled">cancelled</option>
+                        </select>
+                    </div>
+                    <div class="mb-3"><label class="form-label">Ghi chu</label><textarea id="sessNotes" class="form-control" rows="2"></textarea></div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Huy</button><button type="submit" class="btn btn-primary">Luu</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="generateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Tao buoi hoc tu lich lap hang tuan</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form id="generateForm" onsubmit="generateSessions(event)">
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Tu ngay *</label><input type="date" id="genStartDate" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">Den ngay *</label><input type="date" id="genEndDate" class="form-control" required></div>
+                    <div class="alert alert-info small">He thong tao ClassSession co ngay that tu ClassSchedule theo day_of_week.</div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Huy</button><button type="submit" class="btn btn-primary" id="genSubmitBtn"><span id="genSubmitBtnText">Tao</span><span id="genSubmitBtnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span></button></div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/admin/sessions.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    const next = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    document.getElementById('filterDateFrom').value = today;
+    document.getElementById('filterDateTo').value = next;
+    loadLookups().then(loadSessions);
+});
+</script>
+{% endblock %}

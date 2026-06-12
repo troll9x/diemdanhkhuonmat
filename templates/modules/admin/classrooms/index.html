@@ -1,0 +1,247 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Quản lý Lớp học - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>{{ page_title or 'Quản lý Lớp học' }}</h1>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#classroomModal" onclick="resetClassroomForm()">
+        <i class="bi bi-plus"></i> Thêm mới
+    </button>
+</div>
+
+<!-- Search & Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-5">
+                <input type="text" id="searchInput" class="form-control" placeholder="Tìm kiếm theo tên hoặc mã">
+            </div>
+            <div class="col-md-4">
+                <select id="filterLecturer" class="form-select">
+                    <option value="">Tất cả giảng viên</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="row">
+                    <div class="col-6">
+                        <select id="filterActive" class="form-select">
+                            <option value="">Tất cả trạng thái</option>
+                            <option value="true">Hoạt động</option>
+                            <option value="false">Không hoạt động</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <button class="btn btn-outline-secondary w-100" onclick="loadClassrooms()">
+                            <i class="bi bi-search"></i> Tìm
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loadingState" class="text-center d-none">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Đang tải...</span>
+    </div>
+    <p class="mt-2">Đang tải dữ liệu...</p>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="text-center d-none py-5">
+    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+    <p class="text-muted mt-3">Không có lớp học nào</p>
+</div>
+
+<!-- Data Table -->
+<div id="tableContainer" class="d-none">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã</th>
+                    <th>Tên lớp</th>
+                    <th>Giảng viên</th>
+                    <th>Phòng</th>
+                    <th>SV / MH</th>
+                    <th>Trạng thái</th>
+                    <th>Ngày tạo</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody id="classroomsTable">
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <nav id="paginationContainer" class="mt-4 d-none">
+        <ul class="pagination justify-content-center" id="paginationList">
+        </ul>
+    </nav>
+</div>
+
+<!-- Create/Edit Modal -->
+<div class="modal fade" id="classroomModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Thêm mới lớp học</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="classroomForm" onsubmit="saveClassroom(event)">
+                <div class="modal-body">
+                    <input type="hidden" id="classroomId">
+
+                    <div class="mb-3">
+                        <label for="clsCode" class="form-label">Mã lớp *</label>
+                        <input type="text" id="clsCode" class="form-control" placeholder="VD: CNTT1A" required>
+                        <small class="form-text text-danger d-none" id="codeError"></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="clsName" class="form-label">Tên lớp *</label>
+                        <input type="text" id="clsName" class="form-control" placeholder="VD: Lớp CNTT1A" required>
+                        <small class="form-text text-danger d-none" id="nameError"></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="clsLecturer" class="form-label">Giảng viên</label>
+                        <select id="clsLecturer" class="form-select">
+                            <option value="">-- Chọn giảng viên --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" id="clsActive" class="form-check-input" checked>
+                        <label class="form-check-label" for="clsActive">
+                            Hoạt động
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span id="submitBtnText">Lưu</span>
+                        <span id="submitBtnSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Alert for notifications -->
+<div id="alertContainer"></div>
+
+<!-- ── Student Management Modal ───────────────────────────────────────────── -->
+<div class="modal fade" id="studentsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-people"></i> Sinh viên trong lớp:
+                    <span id="smClassName" class="text-primary"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Add students -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Thêm sinh viên vào lớp</label>
+                    <div class="input-group">
+                        <input type="text" id="smSearch" class="form-control"
+                               placeholder="Tìm theo mã hoặc tên sinh viên...">
+                        <button class="btn btn-outline-primary" onclick="smSearchStudents()">
+                            <i class="bi bi-search"></i> Tìm
+                        </button>
+                    </div>
+                    <div id="smSearchResults" class="mt-2"></div>
+                </div>
+                <hr>
+                <!-- Current students -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold">Danh sách sinh viên đã ghi danh
+                        (<span id="smCount">0</span>)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr><th>Mã SV</th><th>Họ tên</th><th>Email</th><th></th></tr>
+                        </thead>
+                        <tbody id="smStudentsTable">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Đang tải...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Subject Management Modal -->
+<div class="modal fade" id="subjectsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-journal-bookmark"></i> Mon hoc trong lop:
+                    <span id="subClassName" class="text-primary"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Them mon hoc vao lop</label>
+                    <div class="input-group">
+                        <select id="subSelect" class="form-select">
+                            <option value="">-- Chon mon hoc --</option>
+                        </select>
+                        <button class="btn btn-outline-primary" onclick="addSubjectToClass()">
+                            <i class="bi bi-plus-circle"></i> Them
+                        </button>
+                    </div>
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-semibold">Danh sach mon hoc (<span id="subCount">0</span>)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr><th>Ma mon</th><th>Ten mon</th><th>Tin chi</th><th></th></tr>
+                        </thead>
+                        <tbody id="subSubjectsTable">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Dang tai...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Dong</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/admin/classrooms.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        loadLecturers();
+        loadSubjectOptions();
+        loadClassrooms();
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') loadClassrooms();
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+<!-- Navigation Bar Component -->
+<div class="container-fluid">
+    <span class="navbar-brand mb-0 h1">Smart Attendance System</span>
+    <div class="d-flex align-items-center ms-auto">
+        <span id="user-name" class="me-3"></span>
+        <img id="user-avatar" src="https://via.placeholder.com/40" alt="Avatar" class="rounded-circle" width="40" height="40">
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const user = auth.getUser();
+        if (user) {
+            document.getElementById('user-name').textContent = user.name || user.username;
+        }
+    });
+</script>

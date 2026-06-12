@@ -1,0 +1,111 @@
+{% extends "layouts/base.html" %}
+{% block title %}Đăng ký khuôn mặt — Bắt buộc{% endblock %}
+
+{% block extra_css %}
+<style>
+#videoWrap { position:relative; display:inline-block; }
+#webcam { width:100%; max-width:480px; border-radius:12px; transform:scaleX(-1); }
+#overlay {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.5); border-radius:12px; color:white; text-align:center;
+    padding:20px;
+}
+.step-card.done  { background:#d1fae5; border-color:#10b981; }
+.step-card.active{ background:#dbeafe; border-color:#3b82f6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+
+    <!-- Mandatory notice -->
+    <div class="alert alert-warning d-flex align-items-start gap-3 mb-4" id="mandatoryNotice">
+      <i class="bi bi-shield-lock-fill fs-3 text-warning flex-shrink-0 mt-1"></i>
+      <div>
+        <strong>Bước bắt buộc trước khi sử dụng hệ thống</strong><br>
+        <span class="text-muted">Bạn cần hoàn tất đăng ký khuôn mặt để có thể tham gia lớp học và điểm danh.
+        Quá trình chỉ mất khoảng <strong>1–2 phút</strong>.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex align-items-center gap-2">
+        <i class="bi bi-person-bounding-box fs-5 text-primary"></i>
+        <span class="fw-semibold">Đăng ký khuôn mặt</span>
+        <span class="badge bg-danger ms-auto">Bắt buộc</span>
+      </div>
+      <div class="card-body">
+        <div id="alertBox"></div>
+
+        <!-- Step progress -->
+        <div class="row g-2 mb-4" id="stepIndicator">
+          <div class="col-4">
+            <div class="step-card text-center p-2 rounded border" id="step1">
+              <div class="fw-bold">1</div><small>Nhìn thẳng</small>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="step-card text-center p-2 rounded border" id="step2">
+              <div class="fw-bold">2</div><small>Sang trái</small>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="step-card text-center p-2 rounded border" id="step3">
+              <div class="fw-bold">3</div><small>Sang phải</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Webcam -->
+        <div class="text-center mb-3">
+          <div id="videoWrap">
+            <video id="webcam" autoplay playsinline muted></video>
+            <div id="overlay">
+              <i class="bi bi-camera-video fs-1 mb-2"></i>
+              <div>Nhấn <strong>"Bắt đầu đăng ký"</strong><br>để mở camera</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="text-muted" id="poseInstruction">Chuẩn bị sẵn sàng</span>
+          <span class="badge bg-primary" id="captureCount">0 frame</span>
+        </div>
+        <div class="progress mb-4" style="height:10px">
+          <div class="progress-bar bg-success" id="progressBar" style="width:0%"
+               role="progressbar"></div>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button class="btn btn-success btn-lg" id="startBtn" onclick="startRegistration()">
+            <i class="bi bi-camera-video me-2"></i>Bắt đầu đăng ký
+          </button>
+          <button class="btn btn-outline-danger d-none" id="stopBtn" onclick="stopRegistration()">
+            <i class="bi bi-stop-circle me-2"></i>Dừng lại
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tips -->
+    <div class="card mt-3">
+      <div class="card-body py-3">
+        <p class="fw-semibold mb-2"><i class="bi bi-lightbulb me-1 text-warning"></i>Hướng dẫn để đạt kết quả tốt</p>
+        <ul class="mb-0 text-muted small">
+          <li>Ngồi trước camera trong điều kiện ánh sáng tốt</li>
+          <li>Giữ khuôn mặt rõ ràng, không đội mũ hay đeo kính mát</li>
+          <li>Làm theo hướng dẫn: nhìn thẳng → quay sang trái → quay sang phải</li>
+          <li>Hệ thống sẽ tự động chuyển bước khi thu đủ dữ liệu</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/student/face-registration.js') }}"></script>
+{% endblock %}

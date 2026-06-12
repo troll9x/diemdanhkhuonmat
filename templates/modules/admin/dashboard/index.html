@@ -1,0 +1,194 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Admin Dashboard - Smart Attendance{% endblock %}
+
+{% block content %}
+<h3 class="mb-4">Dashboard</h3>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-users">—</div>
+            <div class="stat-label">Tổng Người dùng</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-students">—</div>
+            <div class="stat-label">Sinh viên</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-lecturers">—</div>
+            <div class="stat-label">Giảng viên</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-attendance">—</div>
+            <div class="stat-label">Điểm danh Hôm nay</div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Điểm danh theo Phòng ban</div>
+            <div class="card-body">
+                <canvas id="chart-departments" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Thống kê Người dùng</div>
+            <div class="card-body">
+                <canvas id="chart-users" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Thông tin Hệ thống</div>
+            <div class="card-body" id="system-info">
+                <p class="text-muted">Đang tải...</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Kiểm tra Sức khỏe</div>
+            <div class="card-body" id="system-health">
+                <p class="text-muted">Đang tải...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Require authentication
+    requireAuth();
+
+    // Check if user is admin
+    if (!auth.hasRole('admin')) {
+        window.location.href = '/';
+    }
+
+    let chartDepartments = null;
+    let chartUsers = null;
+
+    // Debug: Check token
+    console.log('Token:', auth.getToken());
+    console.log('User:', auth.getUser());
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async () => {
+        const user = auth.getUser();
+        if (user) {
+            document.getElementById('user-name').textContent = user.full_name || user.name || user.username;
+        }
+        
+        await loadDashboardStats();
+        await loadSystemInfo();
+    });
+
+    async function loadDashboardStats() {
+        try {
+            const data = await api.getAdminDashboard();
+            document.getElementById('stat-users').textContent     = (data.overview.total_students + data.overview.total_lecturers);
+            document.getElementById('stat-students').textContent  = data.overview.total_students;
+            document.getElementById('stat-lecturers').textContent = data.overview.total_lecturers;
+            document.getElementById('stat-attendance').textContent = data.attendance_stats.today || 0;
+
+            buildUserChart({
+                students:  data.overview.total_students,
+                lecturers: data.overview.total_lecturers,
+                admins:    1
+            });
+
+            // Load real department data
+            try {
+                const deptData = await api.get('/dashboards/admin/department-stats');
+                const labels = deptData.departments.map(d => d.department_name);
+                const values = deptData.departments.map(d => d.total_attendance);
+                buildDepartmentChart(Object.fromEntries(labels.map((l,i) => [l, values[i]])));
+            } catch (_) {
+                buildDepartmentChart({});
+            }
+        } catch (error) {
+            console.error('Error loading dashboard stats:', error);
+            document.getElementById('stat-users').textContent = 'Lỗi';
+        }
+    }
+
+    function buildDepartmentChart(data) {
+        const ctx = document.getElementById('chart-departments');
+        if (chartDepartments) chartDepartments.destroy();
+        
+        chartDepartments = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(data),
+                datasets: [{
+                    label: 'Điểm danh',
+                    data: Object.values(data),
+                    backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+
+    function buildUserChart(users) {
+        const ctx = document.getElementById('chart-users');
+        if (chartUsers) chartUsers.destroy();
+        
+        chartUsers = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Sinh viên', 'Giảng viên', 'Admin'],
+                datasets: [{
+                    data: [users.students, users.lecturers, users.admins],
+                    backgroundColor: ['#667eea', '#764ba2', '#f093fb']
+                }]
+            },
+            options: { responsive: true }
+        });
+    }
+
+    async function loadSystemInfo() {
+        try {
+            const stats = await api.getSystemStats();
+            const health = await api.getSystemHealth();
+
+            document.getElementById('system-info').innerHTML = `
+                <p><strong>Người dùng:</strong> ${stats.users.total}</p>
+                <p><strong>Phòng ban:</strong> ${stats.master_data.departments}</p>
+                <p><strong>Lớp học:</strong> ${stats.master_data.classrooms}</p>
+                <p><strong>Kích thước DB:</strong> ${stats.database.size_mb} MB</p>
+            `;
+
+            document.getElementById('system-health').innerHTML = `
+                <p><strong>Trạng thái:</strong> <span class="badge bg-${health.status === 'healthy' ? 'success' : 'warning'}">${health.status}</span></p>
+                <p><strong>Database:</strong> ${health.checks.database}</p>
+                <p><strong>Storage:</strong> ${health.checks.storage}</p>
+                <p><strong>Models:</strong> ${health.checks.models}</p>
+            `;
+        } catch (error) {
+            console.error('Error loading system info:', error);
+        }
+    }
+</script>
+{% endblock %}

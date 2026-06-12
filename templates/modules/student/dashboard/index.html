@@ -1,0 +1,68 @@
+{% extends "layouts/base.html" %}
+{% block title %}Dashboard — Sinh viên{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-1">Dashboard Sinh viên</h4>
+        <p class="text-muted mb-0" id="welcomeMsg">Xin chào!</p>
+    </div>
+    <a href="/student/join-class" class="btn btn-primary">
+        <i class="bi bi-door-open me-2"></i>Tham gia lớp
+    </a>
+</div>
+
+<!-- Face registration alert -->
+<div id="faceAlert"></div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4">
+        <div class="stat-card text-center">
+            <div class="stat-value" id="totalClasses">—</div>
+            <div class="stat-label"><i class="bi bi-grid me-1"></i>Lớp đã tham gia</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4">
+        <div class="stat-card text-center">
+            <div id="faceStatus" class="stat-value text-danger">—</div>
+            <div class="stat-label"><i class="bi bi-person-bounding-box me-1"></i>Khuôn mặt</div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="stat-card text-center">
+            <div class="stat-value text-success" id="openSessionCount">—</div>
+            <div class="stat-label"><i class="bi bi-broadcast me-1"></i>Phiên đang mở</div>
+        </div>
+    </div>
+</div>
+
+<!-- Open sessions -->
+<div class="card mb-4" id="openSessionsCard">
+    <div class="card-header"><i class="bi bi-broadcast-pin me-2 text-success"></i>Phiên điểm danh đang mở</div>
+    <div class="card-body p-0" id="openSessionsList">
+        <div class="text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm me-2"></div>Đang kiểm tra...
+        </div>
+    </div>
+</div>
+
+<!-- My classes -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-grid-3x3-gap me-2"></i>Lớp học của tôi</span>
+        <a href="/student/join-class" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-plus me-1"></i>Tham gia lớp
+        </a>
+    </div>
+    <div class="card-body p-0" id="myClassesList">
+        <div class="text-center py-4 text-muted">
+            <div class="spinner-border spinner-border-sm me-2"></div>Đang tải...
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/student/dashboard.js') }}"></script>
+{% endblock %}

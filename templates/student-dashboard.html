@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Student Dashboard - Smart Attendance</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .navbar-brand {
+            color: white !important;
+            font-weight: bold;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .stat-card .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-card .stat-label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+        }
+        .table {
+            margin-bottom: 0;
+        }
+        .badge {
+            padding: 5px 10px;
+        }
+        .content {
+            padding: 20px;
+        }
+        .profile-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .profile-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">📷 Smart Attendance</span>
+            <div class="d-flex align-items-center gap-3">
+                <span id="user-name" class="text-white"></span>
+                <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                    <i class="bi bi-box-arrow-right"></i> Đăng xuất
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="content">
+        <div class="container-fluid">
+            <h2 class="mb-4">Dashboard Sinh viên</h2>
+
+            <!-- Profile Section -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="profile-card">
+                        <div class="text-center">
+                            <img id="user-avatar" src="https://via.placeholder.com/100" alt="Avatar" class="profile-avatar">
+                            <h5 id="profile-name">—</h5>
+                            <p id="profile-code" class="text-muted">—</p>
+                            <p id="profile-email" class="text-muted small">—</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-total">—</div>
+                                <div class="stat-label">Tổng Buổi học</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-present">—</div>
+                                <div class="stat-label">Có mặt</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-absent">—</div>
+                                <div class="stat-label">Vắng</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card">
+                                <div class="stat-value" id="stat-rate">—</div>
+                                <div class="stat-label">Tỷ lệ Có mặt</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance History -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Lịch sử Điểm danh</span>
+                    <div class="d-flex gap-2">
+                        <input type="date" id="filter-date" class="form-control form-control-sm" style="width: 150px;">
+                        <button class="btn btn-sm btn-primary" onclick="loadAttendance()">🔍 Lọc</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">Xóa</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Lớp học</th>
+                                <th>Môn học</th>
+                                <th>Ngày</th>
+                                <th>Giờ</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-table">
+                            <tr><td colspan="6" class="text-center text-muted py-4">Đang tải...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Classes -->
+            <div class="card mt-4">
+                <div class="card-header">Lớp học của tôi</div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Lớp</th>
+                                <th>Môn học</th>
+                                <th>Giảng viên</th>
+                                <th>Học kỳ</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody id="classes-table">
+                            <tr><td colspan="5" class="text-center text-muted py-4">Đang tải...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script>
+        // Require authentication
+        requireAuth();
+
+        // Check if user is student
+        if (!auth.hasRole('student')) {
+            window.location.href = '/';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            const user = auth.getUser();
+            document.getElementById('user-name').textContent = user.name;
+            
+            try {
+                const userInfo = await auth.apiCall('/api/auth/me');
+                document.getElementById('profile-name').textContent = userInfo.full_name;
+                document.getElementById('profile-code').textContent = userInfo.student_code || '—';
+                document.getElementById('profile-email').textContent = userInfo.email || '—';
+            } catch (error) {
+                console.error('Error loading user info:', error);
+            }
+
+            await loadAttendanceStats();
+            await loadAttendance();
+            await loadClasses();
+        });
+
+        async function loadAttendanceStats() {
+            try {
+                const data = await auth.apiCall('/api/dashboards/student');
+                document.getElementById('stat-total').textContent = data.attendance.total || 0;
+                document.getElementById('stat-present').textContent = data.attendance.present || 0;
+                document.getElementById('stat-absent').textContent = data.attendance.absent || 0;
+                
+                const rate = data.attendance.total > 0 
+                    ? Math.round((data.attendance.present / data.attendance.total) * 100) + '%'
+                    : '0%';
+                document.getElementById('stat-rate').textContent = rate;
+            } catch (error) {
+                console.error('Error loading attendance stats:', error);
+            }
+        }
+
+        async function loadAttendance() {
+            try {
+                const date = document.getElementById('filter-date').value;
+                let url = '/api/attendance?page=1&per_page=100';
+                if (date) url += `&date=${date}`;
+
+                const data = await auth.apiCall(url);
+                const tbody = document.getElementById('attendance-table');
+                
+                if (!data.records || data.records.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.records.map((r, i) => `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${r.classroom_name || '—'}</td>
+                        <td>${r.subject_name || '—'}</td>
+                        <td>${formatDate(r.created_at)}</td>
+                        <td>${new Date(r.created_at).toLocaleTimeString('vi-VN')}</td>
+                        <td><span class="badge bg-success">${r.status || 'Có mặt'}</span></td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading attendance:', error);
+            }
+        }
+
+        async function loadClasses() {
+            try {
+                const data = await auth.apiCall('/api/dashboards/student');
+                const tbody = document.getElementById('classes-table');
+                
+                if (!data.classrooms || data.classrooms.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Không có dữ liệu</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.classrooms.map(c => `
+                    <tr>
+                        <td>${c.name}</td>
+                        <td>${c.subjects ? c.subjects.map(s => s.name).join(', ') : '—'}</td>
+                        <td>${c.lecturer_name || '—'}</td>
+                        <td>${c.semester || '—'}</td>
+                        <td><span class="badge bg-success">Hoạt động</span></td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading classes:', error);
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById('filter-date').value = '';
+            loadAttendance();
+        }
+
+        async function logout() {
+            await auth.logout();
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>

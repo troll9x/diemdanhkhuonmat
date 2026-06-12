@@ -1,0 +1,91 @@
+<!-- Dynamic Sidebar Component -->
+<h5><i class="bi bi-mortarboard-fill me-2"></i>Smart Attendance</h5>
+
+<div id="sidebar-menu">
+    <a href="#" class="nav-link"><i class="bi bi-hourglass-split"></i> Đang tải...</a>
+</div>
+
+<hr style="border-color: rgba(255,255,255,0.2); margin: 15px 0;">
+<a href="#" onclick="sidebarLogout()" class="nav-link">
+    <i class="bi bi-box-arrow-right"></i> Đăng xuất
+</a>
+
+<script>
+(function () {
+    const MENUS = {
+        teacher: [
+            { title: 'Dashboard',    icon: 'bi-speedometer2',   route: '/teacher/dashboard' },
+            { title: 'Lớp học',      icon: 'bi-grid-3x3-gap',   route: '/teacher/classes' },
+            { title: 'Lịch sử',      icon: 'bi-clock-history',  route: '/teacher/logs' },
+        ],
+        lecturer: [
+            { title: 'Dashboard',    icon: 'bi-speedometer2',   route: '/teacher/dashboard' },
+            { title: 'Lớp học',      icon: 'bi-grid-3x3-gap',   route: '/teacher/classes' },
+            { title: 'Lịch sử',      icon: 'bi-clock-history',  route: '/teacher/logs' },
+        ],
+        student: [
+            { title: 'Dashboard',        icon: 'bi-speedometer2',        route: '/student/dashboard' },
+            { title: 'Tham gia lớp',     icon: 'bi-door-open',           route: '/student/join-class' },
+            { title: 'Đăng ký khuôn mặt', icon: 'bi-person-bounding-box', route: '/student/face-registration' },
+            { title: 'Điểm danh',        icon: 'bi-camera-video',        route: '/student/checkin' },
+            { title: 'Lịch sử',          icon: 'bi-clock-history',       route: '/student/logs' },
+        ],
+        admin: [
+            { title: 'Dashboard', icon: 'bi-speedometer2', route: '/admin-dashboard' },
+            { title: 'Giảng viên', icon: 'bi-person-badge', route: '/admin/lecturers' },
+            { title: 'Sinh viên',  icon: 'bi-people',       route: '/admin/students' },
+            { title: 'Lớp học',    icon: 'bi-book',         route: '/admin/classrooms' },
+            { title: 'Điểm danh',  icon: 'bi-clipboard-check', route: '/admin/attendance' },
+        ],
+    };
+
+    function renderMenu(items) {
+        const cur = window.location.pathname;
+        return items.map(item => {
+            const active = cur === item.route || cur.startsWith(item.route + '/') ? 'active' : '';
+            return `<a href="${item.route}" class="nav-link ${active}">
+                        <i class="bi ${item.icon} me-2"></i>${item.title}
+                    </a>`;
+        }).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const user = (typeof auth !== 'undefined') ? auth.getUser() : null;
+            const role = user ? user.role : null;
+            let items = MENUS[role] || [];
+
+            // For students not yet registered, show only the face-registration item
+            if (role === 'student') {
+                try {
+                    const token = auth.getToken();
+                    const res = await fetch('/api/student/me', {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (!data.face_registered) {
+                            items = [
+                                { title: 'Đăng ký khuôn mặt', icon: 'bi-person-bounding-box', route: '/student/face-registration' },
+                            ];
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            document.getElementById('sidebar-menu').innerHTML =
+                items.length ? renderMenu(items) : '<span class="text-white-50 small px-3">—</span>';
+        } catch (e) {
+            console.warn('Sidebar error:', e);
+        }
+    });
+
+    window.sidebarLogout = async function () {
+        try {
+            if (typeof api !== 'undefined') await api.post('/auth/logout', {});
+        } catch (_) {}
+        if (typeof auth !== 'undefined') auth.logout();
+        window.location.href = '/login';
+    };
+}());
+</script>

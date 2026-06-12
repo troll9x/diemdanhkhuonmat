@@ -1,0 +1,231 @@
+{% extends "layouts/base.html" %}
+{% block title %}Chi tiết lớp học{% endblock %}
+
+{% block extra_css %}
+<style>
+.sched-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #f0f4ff; border: 1px solid #c7d7ff;
+    border-radius: 8px; padding: 6px 12px; font-size: .875rem;
+}
+.student-row:hover { background: #f8f9fa; }
+.stat-mini { text-align:center; padding: 16px 8px; }
+.stat-mini .val { font-size: 1.6rem; font-weight: 700; line-height: 1; }
+.stat-mini .lbl { font-size: .75rem; color: #6c757d; margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb + header -->
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/teacher/classes">Lớp học</a></li>
+    <li class="breadcrumb-item active" id="breadcrumbName">—</li>
+  </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4" id="pageHeader">
+  <div>
+    <h4 class="fw-bold mb-1" id="className">
+      <div class="placeholder-glow"><span class="placeholder col-4"></span></div>
+    </h4>
+    <p class="text-muted mb-0" id="classMeta"></p>
+  </div>
+  <div class="d-flex gap-2" id="headerActions" style="display:none!important">
+    <button class="btn btn-outline-warning" onclick="openEditModal()">
+      <i class="bi bi-pencil me-1"></i>Sửa lớp
+    </button>
+    <a id="attendanceLink" href="#" class="btn btn-success">
+      <i class="bi bi-clipboard-check me-1"></i>Điểm danh
+    </a>
+  </div>
+</div>
+
+<div id="alertBox"></div>
+
+<!-- Mini stats -->
+<div class="row g-3 mb-4" id="miniStats">
+  <div class="col-6 col-md-3">
+    <div class="card stat-mini">
+      <div class="val text-primary" id="statStudents">—</div>
+      <div class="lbl"><i class="bi bi-people me-1"></i>Sinh viên</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-mini">
+      <div class="val text-success" id="statSessions">—</div>
+      <div class="lbl"><i class="bi bi-calendar-check me-1"></i>Buổi đã dạy</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-mini">
+      <div class="val text-info" id="statSchedules">—</div>
+      <div class="lbl"><i class="bi bi-calendar3 me-1"></i>Buổi/tuần</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-mini">
+      <div class="val text-warning" id="statDaysLeft">—</div>
+      <div class="lbl"><i class="bi bi-hourglass-split me-1"></i>Ngày còn lại</div>
+    </div>
+  </div>
+</div>
+
+<!-- Two-column layout -->
+<div class="row g-4">
+
+  <!-- Left: TKB + date range -->
+  <div class="col-lg-5">
+
+    <!-- Thời gian khoá học -->
+    <div class="card mb-4">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-calendar-range me-2 text-primary"></i>Thời gian khoá học
+        <button class="btn btn-sm btn-outline-warning float-end" onclick="openEditModal()">
+          <i class="bi bi-pencil"></i>
+        </button>
+      </div>
+      <div class="card-body" id="dateRangeBody">
+        <div class="placeholder-glow"><span class="placeholder col-8"></span></div>
+      </div>
+    </div>
+
+    <!-- Thời khóa biểu -->
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+          <i class="bi bi-calendar3 me-2 text-primary"></i>Thời khóa biểu
+        </span>
+        <button class="btn btn-sm btn-outline-primary" onclick="openScheduleModal()">
+          <i class="bi bi-plus me-1"></i>Thêm / Sửa
+        </button>
+      </div>
+      <div class="card-body p-0" id="scheduleBody">
+        <div class="text-center py-4 text-muted small">Đang tải...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Right: Danh sách sinh viên -->
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+          <i class="bi bi-people me-2 text-primary"></i>Danh sách sinh viên
+          <span class="badge bg-secondary ms-1" id="studentCountBadge">0</span>
+        </span>
+        <div class="d-flex gap-2 align-items-center">
+          <input type="text" class="form-control form-control-sm" id="studentSearch"
+                 placeholder="Tìm kiếm..." oninput="filterStudents()"
+                 style="width:160px">
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div id="studentListBody">
+          <div class="text-center py-5 text-muted">Đang tải...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ Modal Edit lớp ══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Chỉnh sửa lớp học</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="editAlertBox"></div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Tên lớp <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="editName">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Mô tả</label>
+          <textarea class="form-control" id="editDesc" rows="2"></textarea>
+        </div>
+        <div class="row g-3">
+          <div class="col-6">
+            <label class="form-label fw-semibold">Ngày bắt đầu <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="editStart">
+          </div>
+          <div class="col-6">
+            <label class="form-label fw-semibold">Ngày kết thúc <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="editEnd">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Huỷ</button>
+        <button class="btn btn-primary" id="editSaveBtn" onclick="saveEdit()">
+          <i class="bi bi-save me-1"></i>Lưu
+          <span id="editSpinner" class="spinner-border spinner-border-sm d-none ms-1"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Modal TKB ════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="schedModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-calendar3 me-2"></i>Quản lý thời khóa biểu</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="schedAlertBox"></div>
+        <div id="schedListBody" class="mb-3"></div>
+        <div class="card border-primary">
+          <div class="card-header bg-primary text-white">
+            <i class="bi bi-plus-circle me-2"></i>Thêm / cập nhật buổi học
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Thứ</label>
+                <select class="form-select" id="newDay">
+                  <option value="0">Thứ 2</option><option value="1">Thứ 3</option>
+                  <option value="2">Thứ 4</option><option value="3">Thứ 5</option>
+                  <option value="4">Thứ 6</option><option value="5">Thứ 7</option>
+                  <option value="6">Chủ nhật</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Giờ bắt đầu</label>
+                <input type="time" class="form-control" id="newStart" value="07:30">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Giờ kết thúc</label>
+                <input type="time" class="form-control" id="newEnd" value="09:30">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Muộn (phút)</label>
+                <input type="number" class="form-control" id="newLate" value="15" min="1" max="120">
+              </div>
+              <div class="col-12">
+                <button class="btn btn-primary" onclick="saveSched()">
+                  <i class="bi bi-save me-2"></i>Lưu lịch
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>const PAGE_CLASS_ID = {{ class_id }};</script>
+<script src="{{ url_for('static', filename='js/modules/teacher/class-detail.js') }}"></script>
+{% endblock %}

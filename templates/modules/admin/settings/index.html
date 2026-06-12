@@ -1,0 +1,232 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Cài đặt hệ thống - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-gear"></i> {{ page_title or 'Cài đặt hệ thống' }}</h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSettingModal">
+        <i class="bi bi-plus-lg"></i> Thêm cài đặt
+    </button>
+</div>
+
+<!-- Loading -->
+<div id="loadingState" class="text-center py-5">
+    <div class="spinner-border text-primary"></div>
+    <p class="mt-2 text-muted">Đang tải...</p>
+</div>
+
+<!-- Empty state -->
+<div id="emptyState" class="text-center py-5 d-none">
+    <i class="bi bi-sliders" style="font-size:3rem;color:#ccc;"></i>
+    <p class="text-muted mt-3">Chưa có cài đặt nào</p>
+</div>
+
+<!-- Settings table -->
+<div id="tableContainer" class="card d-none">
+    <div class="card-header"><i class="bi bi-sliders"></i> Danh sách cài đặt</div>
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Khóa (Key)</th>
+                    <th>Giá trị</th>
+                    <th>Kiểu</th>
+                    <th>Mô tả</th>
+                    <th>Cập nhật lần cuối</th>
+                    <th>Hành động</th>
+                </tr>
+            </thead>
+            <tbody id="settingsTable"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Alert -->
+<div id="alertContainer" class="mt-3"></div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Sửa cài đặt: <span id="editKey"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Giá trị</label>
+                    <input type="text" id="editValue" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Mô tả</label>
+                    <input type="text" id="editDesc" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" onclick="saveSetting()">Lưu</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal fade" id="addSettingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Thêm cài đặt mới</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Khóa (Key) <span class="text-danger">*</span></label>
+                    <input type="text" id="newKey" class="form-control" placeholder="vd: max_upload_size">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Giá trị <span class="text-danger">*</span></label>
+                    <input type="text" id="newValue" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Kiểu dữ liệu</label>
+                    <select id="newDataType" class="form-select">
+                        <option value="string">string</option>
+                        <option value="int">int</option>
+                        <option value="float">float</option>
+                        <option value="bool">bool</option>
+                        <option value="json">json</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Mô tả</label>
+                    <input type="text" id="newDesc" class="form-control">
+                </div>
+                <div id="addError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" onclick="addSetting()">Thêm</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let editingKey = null;
+
+    document.addEventListener('DOMContentLoaded', loadSettings);
+
+    async function loadSettings() {
+        try {
+            const data = await api.get('/system/settings');
+            const settings = data.settings || [];
+
+            if (!settings.length) {
+                document.getElementById('emptyState').classList.remove('d-none');
+                document.getElementById('loadingState').classList.add('d-none');
+                return;
+            }
+
+            const tbody = document.getElementById('settingsTable');
+            tbody.innerHTML = settings.map(s => `
+                <tr>
+                    <td><code>${escHtml(s.key)}</code></td>
+                    <td><span class="text-truncate d-inline-block" style="max-width:200px;" title="${escHtml(s.value)}">${escHtml(s.value || '')}</span></td>
+                    <td><span class="badge bg-secondary">${s.data_type}</span></td>
+                    <td>${escHtml(s.description || '—')}</td>
+                    <td>${s.updated_at || '—'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="openEdit('${escHtml(s.key)}','${escHtml(s.value||'')}','${escHtml(s.description||'')}')">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteSetting('${escHtml(s.key)}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('tableContainer').classList.remove('d-none');
+        } catch(e) {
+            document.getElementById('loadingState').innerHTML =
+                `<div class="alert alert-danger">Lỗi tải cài đặt: ${e.message}</div>`;
+        }
+    }
+
+    function openEdit(key, value, desc) {
+        editingKey = key;
+        document.getElementById('editKey').textContent = key;
+        document.getElementById('editValue').value = value;
+        document.getElementById('editDesc').value = desc;
+        new bootstrap.Modal(document.getElementById('editModal')).show();
+    }
+
+    async function saveSetting() {
+        try {
+            await api.put(`/system/settings/${editingKey}`, {
+                value: document.getElementById('editValue').value,
+                description: document.getElementById('editDesc').value
+            });
+            bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+            showAlert('Đã lưu cài đặt thành công', 'success');
+            loadSettings();
+        } catch(e) {
+            showAlert('Lỗi: ' + e.message, 'danger');
+        }
+    }
+
+    async function addSetting() {
+        const key = document.getElementById('newKey').value.trim();
+        const value = document.getElementById('newValue').value;
+        const data_type = document.getElementById('newDataType').value;
+        const description = document.getElementById('newDesc').value;
+        const errEl = document.getElementById('addError');
+
+        if (!key) {
+            errEl.textContent = 'Khóa là bắt buộc';
+            errEl.classList.remove('d-none');
+            return;
+        }
+        errEl.classList.add('d-none');
+
+        try {
+            await api.post('/system/settings', { key, value, data_type, description });
+            bootstrap.Modal.getInstance(document.getElementById('addSettingModal')).hide();
+            document.getElementById('newKey').value = '';
+            document.getElementById('newValue').value = '';
+            showAlert('Đã thêm cài đặt thành công', 'success');
+            loadSettings();
+        } catch(e) {
+            errEl.textContent = 'Lỗi: ' + e.message;
+            errEl.classList.remove('d-none');
+        }
+    }
+
+    async function deleteSetting(key) {
+        if (!confirm(`Xóa cài đặt "${key}"?`)) return;
+        try {
+            await api.delete(`/system/settings/${key}`);
+            showAlert('Đã xóa cài đặt', 'success');
+            loadSettings();
+        } catch(e) {
+            showAlert('Lỗi: ' + e.message, 'danger');
+        }
+    }
+
+    function showAlert(msg, type) {
+        const el = document.getElementById('alertContainer');
+        el.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show">
+            ${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+    }
+    function escHtml(t) {
+        const d = document.createElement('div');
+        d.textContent = t || '';
+        return d.innerHTML;
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "layouts/base.html" %}
+{% block title %}Tham gia lớp học{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-door-open me-2"></i>Tham gia lớp học</h5>
+            </div>
+            <div class="card-body">
+                <div id="alertBox"></div>
+                <p class="text-muted">Nhập mã lớp do giảng viên cung cấp để tham gia.</p>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Mã lớp <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-lg text-center text-uppercase fw-bold"
+                           id="classCode" placeholder="VD: ABC123" maxlength="10"
+                           style="letter-spacing:4px; font-size:1.4rem">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Mã sinh viên <span class="text-muted">(tuỳ chọn)</span></label>
+                    <input type="text" class="form-control" id="studentCode" placeholder="VD: SV001">
+                </div>
+                <button class="btn btn-primary btn-lg w-100" onclick="joinClass()">
+                    <span id="joinBtnText"><i class="bi bi-check2-circle me-2"></i>Tham gia lớp</span>
+                    <span id="joinSpinner" class="spinner-border spinner-border-sm d-none ms-2"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- My classes -->
+        <div class="card mt-4">
+            <div class="card-header"><i class="bi bi-grid me-2"></i>Lớp học đã tham gia</div>
+            <div class="card-body p-0" id="myClassesList">
+                <div class="text-center py-4 text-muted">
+                    <div class="spinner-border spinner-border-sm me-2"></div>Đang tải...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/modules/student/join-class.js') }}"></script>
+{% endblock %}

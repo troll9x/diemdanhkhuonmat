@@ -1,0 +1,313 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Báo cáo Điểm danh - Smart Attendance{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-file-earmark-bar-graph"></i> {{ page_title or 'Báo cáo Điểm danh' }}</h2>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-funnel"></i> Bộ lọc</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-2">
+                <label class="form-label">Từ ngày</label>
+                <input type="date" id="filterStartDate" class="form-control">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Đến ngày</label>
+                <input type="date" id="filterEndDate" class="form-control">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Lớp học</label>
+                <select id="filterClassroom" class="form-select">
+                    <option value="">Tất cả lớp</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Môn học</label>
+                <select id="filterSubject" class="form-select">
+                    <option value="">Tất cả môn</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Trạng thái</label>
+                <select id="filterStatus" class="form-select">
+                    <option value="">Tất cả</option>
+                    <option value="present">Có mặt</option>
+                    <option value="late">Muộn</option>
+                    <option value="absent">Vắng</option>
+                    <option value="excused">Xin phép</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="loadReport()">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4 d-none" id="summaryCards">
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-value text-primary" id="sumTotal">—</div>
+            <div class="stat-label">Tổng bản ghi</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-value text-success" id="sumPresent">—</div>
+            <div class="stat-label">Có mặt</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-value text-warning" id="sumLate">—</div>
+            <div class="stat-label">Muộn</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-value text-danger" id="sumAbsent">—</div>
+            <div class="stat-label">Vắng</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card text-center">
+            <div class="stat-value text-info" id="sumRate">—%</div>
+            <div class="stat-label">Tỷ lệ điểm danh</div>
+        </div>
+    </div>
+    <div class="col-md-2 d-flex align-items-center justify-content-center">
+        <div class="d-flex flex-column gap-2 w-100">
+            <button class="btn btn-sm btn-outline-success" onclick="exportReport('excel')">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </button>
+            <button class="btn btn-sm btn-outline-danger" onclick="exportReport('pdf')">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="exportReport('csv')">
+                <i class="bi bi-file-earmark-text"></i> CSV
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading -->
+<div id="loadingState" class="text-center py-5 d-none">
+    <div class="spinner-border text-primary"></div>
+    <p class="mt-2 text-muted">Đang tải...</p>
+</div>
+
+<!-- Empty state -->
+<div id="emptyState" class="text-center py-5 d-none">
+    <i class="bi bi-inbox" style="font-size:3rem;color:#ccc;"></i>
+    <p class="text-muted mt-3">Không có dữ liệu điểm danh. Thay đổi bộ lọc và nhấn Tìm.</p>
+</div>
+
+<!-- Table -->
+<div id="tableContainer" class="d-none">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span id="tableCaption">Kết quả</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mã SV</th>
+                        <th>Tên sinh viên</th>
+                        <th>Lớp học</th>
+                        <th>Môn học</th>
+                        <th>Ngày học</th>
+                        <th>Giờ điểm danh</th>
+                        <th>Trạng thái</th>
+                        <th>Độ chính xác</th>
+                    </tr>
+                </thead>
+                <tbody id="reportTable"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <nav class="mt-3">
+        <ul class="pagination justify-content-center" id="pagination"></ul>
+    </nav>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPage = 1;
+    let currentFilters = {};
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const today = new Date().toISOString().split('T')[0];
+        const monthAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];
+        document.getElementById('filterStartDate').value = monthAgo;
+        document.getElementById('filterEndDate').value = today;
+        loadDropdowns();
+    });
+
+    async function loadDropdowns() {
+        try {
+            const [cls, subj] = await Promise.all([
+                api.get('/classrooms?per_page=500'),
+                api.get('/subjects?per_page=500')
+            ]);
+            const clSel = document.getElementById('filterClassroom');
+            (cls.items || []).forEach(c => {
+                clSel.innerHTML += `<option value="${c.id}">${c.class_name || c.name}</option>`;
+            });
+            const subSel = document.getElementById('filterSubject');
+            (subj.items || []).forEach(s => {
+                subSel.innerHTML += `<option value="${s.id}">${s.subject_name || s.name}</option>`;
+            });
+        } catch(e) { console.error('Dropdown load error', e); }
+    }
+
+    async function loadReport(page = 1) {
+        currentPage = page;
+        currentFilters = {
+            start_date: document.getElementById('filterStartDate').value,
+            end_date: document.getElementById('filterEndDate').value,
+            classroom_id: document.getElementById('filterClassroom').value,
+            subject_id: document.getElementById('filterSubject').value,
+            status: document.getElementById('filterStatus').value,
+            page,
+            per_page: 50
+        };
+
+        setLoading(true);
+        try {
+            const params = new URLSearchParams();
+            Object.entries(currentFilters).forEach(([k,v]) => { if(v) params.set(k, v); });
+            const data = await api.get('/reports/attendance?' + params.toString());
+
+            // Summary
+            const s = data.summary || {};
+            document.getElementById('sumTotal').textContent = s.total ?? 0;
+            document.getElementById('sumPresent').textContent = s.present ?? 0;
+            document.getElementById('sumLate').textContent = s.late ?? 0;
+            document.getElementById('sumAbsent').textContent = s.absent ?? 0;
+            document.getElementById('sumRate').textContent = (s.rate ?? 0) + '%';
+            document.getElementById('summaryCards').classList.remove('d-none');
+
+            // Records
+            const records = data.records || [];
+            if (!records.length) {
+                setEmpty(true);
+                return;
+            }
+            setEmpty(false);
+
+            document.getElementById('tableCaption').textContent =
+                `Tìm thấy ${data.pagination.total} bản ghi`;
+
+            const tbody = document.getElementById('reportTable');
+            tbody.innerHTML = records.map(r => `
+                <tr>
+                    <td><code>${r.student_code}</code></td>
+                    <td>${r.student_name}</td>
+                    <td>${r.classroom_name}</td>
+                    <td>${r.subject_name}</td>
+                    <td>${r.session_date || '—'}</td>
+                    <td>${r.attendance_time || '—'}</td>
+                    <td>${statusBadge(r.status)}</td>
+                    <td>${r.confidence_score != null ? r.confidence_score + '%' : '—'}</td>
+                </tr>
+            `).join('');
+
+            renderPagination(data.pagination);
+            document.getElementById('tableContainer').classList.remove('d-none');
+        } catch(e) {
+            console.error(e);
+            alert('Lỗi: ' + e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function statusBadge(status) {
+        const map = {
+            present: ['success', 'Có mặt'],
+            late:    ['warning', 'Muộn'],
+            absent:  ['danger',  'Vắng'],
+            excused: ['secondary','Xin phép']
+        };
+        const [cls, label] = map[status] || ['secondary', status];
+        return `<span class="badge bg-${cls}">${label}</span>`;
+    }
+
+    function renderPagination(p) {
+        const ul = document.getElementById('pagination');
+        if (p.pages <= 1) { ul.innerHTML = ''; return; }
+        let html = '';
+        html += `<li class="page-item ${!p.has_prev ? 'disabled' : ''}">
+            <a class="page-link" onclick="loadReport(${p.page-1})">‹</a></li>`;
+        for (let i = 1; i <= p.pages; i++) {
+            if (Math.abs(i - p.page) > 2 && i !== 1 && i !== p.pages) continue;
+            html += `<li class="page-item ${i===p.page?'active':''}">
+                <a class="page-link" onclick="loadReport(${i})">${i}</a></li>`;
+        }
+        html += `<li class="page-item ${!p.has_next ? 'disabled' : ''}">
+            <a class="page-link" onclick="loadReport(${p.page+1})">›</a></li>`;
+        ul.innerHTML = html;
+    }
+
+    async function exportReport(format) {
+        const token = auth.getToken();
+        const body = {
+            start_date: currentFilters.start_date || null,
+            end_date: currentFilters.end_date || null,
+            classroom_id: currentFilters.classroom_id ? parseInt(currentFilters.classroom_id) : null,
+            include_stats: true
+        };
+
+        try {
+            const resp = await fetch(`/api/reports/attendance/${format}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify(body)
+            });
+            if (!resp.ok) {
+                const err = await resp.json();
+                alert('Xuất lỗi: ' + (err.error || resp.status));
+                return;
+            }
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ext = {excel:'xlsx', pdf:'pdf', csv:'csv'}[format];
+            a.download = `attendance_report_${new Date().toISOString().split('T')[0]}.${ext}`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch(e) {
+            alert('Lỗi xuất file: ' + e.message);
+        }
+    }
+
+    function setLoading(on) {
+        document.getElementById('loadingState').classList.toggle('d-none', !on);
+        if (on) {
+            document.getElementById('tableContainer').classList.add('d-none');
+            document.getElementById('emptyState').classList.add('d-none');
+        }
+    }
+
+    function setEmpty(on) {
+        document.getElementById('emptyState').classList.toggle('d-none', !on);
+        document.getElementById('tableContainer').classList.toggle('d-none', on);
+    }
+</script>
+{% endblock %}
